@@ -1,4 +1,3 @@
-(A) Implement API app generator adapter in `app/generation/api_app.py` for service-style prompts +builder +generation
 (A) Implement generated project writer that materializes files under `runs/<run_id>/project` in `app/generation/writer.py` +builder +generation +storage
 (A) Implement command runner with timeout and streamed logs in `app/runtime/command_runner.py` +builder +runtime
 (A) Implement dependency install runner with retry and backoff in `app/runtime/install.py` +builder +runtime
