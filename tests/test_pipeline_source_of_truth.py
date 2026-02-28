@@ -35,6 +35,7 @@ def test_pipeline_writes_research_and_selection_artifacts(monkeypatch, tmp_path:
     assert (artifacts / "build-generation.json").exists()
     assert (artifacts / "testing-report.json").exists()
     assert (artifacts / "completion-contract.json").exists()
+    assert (artifacts / "phase-timings.json").exists()
     assert (artifacts / "run-outcome.json").exists()
     assert (run_dirs[0] / "codex-notes.log").exists()
 
@@ -51,6 +52,8 @@ def test_pipeline_writes_research_and_selection_artifacts(monkeypatch, tmp_path:
     run_outcome = json.loads((artifacts / "run-outcome.json").read_text(encoding="utf-8"))
     assert run_outcome["done"] is True
     assert run_outcome["fatal_errors"] == []
+    phase_timings = json.loads((artifacts / "phase-timings.json").read_text(encoding="utf-8"))
+    assert "INTAKE" in phase_timings
 
 
 def test_pipeline_auto_falls_back_to_top_candidate_when_evidence_gate_fails(

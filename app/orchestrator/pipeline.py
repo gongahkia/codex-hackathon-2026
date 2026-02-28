@@ -42,6 +42,7 @@ from app.testing.fallback import run_tests_with_fallback
 from app.testing.integration_pytest import run_pytest_integration
 from app.testing.integration_vitest import run_vitest_integration
 from app.testing.strategy import select_test_plan
+from app.telemetry.timings import PhaseTimingCollector
 from app.video.pitch_narrative import optimize_pitch_narrative
 from app.video.project_bundle import ensure_remotion_bundle
 from app.video.remotion_config import compose_remotion_config
@@ -98,12 +99,14 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
     warnings: list[str] = []
     recoveries: list[str] = []
     fatal_errors: list[str] = []
+    phase_timings = PhaseTimingCollector()
 
     try:
         for state in PIPELINE_ORDER:
             transitions.append(state)
             store.append_transition(run_id, state.value)
             _append_note(notes_path, "STATE", state.value)
+            phase_timings.start(state.value)
 
             try:
                 if state == RunState.INTAKE:
@@ -443,6 +446,8 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                     raise
                 recoveries.append(state.value)
                 continue
+            finally:
+                phase_timings.stop(state.value)
 
         completion = _evaluate_completion_contract(
             artifacts_dir=artifacts_dir,
@@ -472,6 +477,7 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
             warnings.append(completion_warning)
             recoveries.append("COMPLETION")
 
+        writer.write_json("phase-timings.json", phase_timings.as_dict())
         writer.write_json(
             "run-outcome.json",
             {
@@ -494,6 +500,7 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
         fatal_error = redact_secrets(str(exc))
         fatal_errors.append(fatal_error)
         writer.write_json("pipeline-error.json", {"error": fatal_error})
+        writer.write_json("phase-timings.json", phase_timings.as_dict())
         writer.write_json(
             "run-outcome.json",
             {
