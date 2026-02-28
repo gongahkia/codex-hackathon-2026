@@ -34,3 +34,18 @@ def test_run_store_persists_warning_and_fatal_counts(tmp_path) -> None:
     assert payload["warning_count"] == 2
     assert payload["fatal_count"] == 1
     assert payload["last_error_code"] == "TIMEOUT_ERROR"
+
+
+def test_run_store_prune_runs_keeps_latest_ids(tmp_path) -> None:
+    db_path = tmp_path / "runs.db"
+    store = RunStore(db_path=db_path)
+    store.save_config("run-1", {"problem_statement": "x"})
+    store.save_config("run-2", {"problem_statement": "x"})
+    store.save_config("run-3", {"problem_statement": "x"})
+
+    keep_ids = store.prune_runs(keep_latest=2)
+    assert len(keep_ids) == 2
+
+    assert store.get_run("run-3") is not None
+    assert store.get_run("run-2") is not None
+    assert store.get_run("run-1") is None

@@ -146,3 +146,30 @@ def test_cli_maps_resume_run_id(monkeypatch) -> None:
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert payload["resume_run_id"] == "run-123"
+
+
+def test_cli_maps_retention_limit(monkeypatch) -> None:
+    runner = CliRunner()
+
+    def fake_run_pipeline(config):
+        assert config.retention_limit == 12
+        return [RunState.INTAKE, RunState.DONE]
+
+    monkeypatch.setattr("app.cli.run_pipeline", fake_run_pipeline)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--problem-statement",
+            "Build AI todo app",
+            "--deadline-hours",
+            "6",
+            "--retention-limit",
+            "12",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["retention_limit"] == 12

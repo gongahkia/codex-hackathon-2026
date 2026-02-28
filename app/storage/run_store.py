@@ -125,3 +125,23 @@ class RunStore:
                 "fatal_count": row[5],
                 "last_error_code": row[6],
             }
+
+    def prune_runs(self, keep_latest: int) -> set[str]:
+        if keep_latest < 1:
+            raise ValueError("keep_latest must be at least 1")
+
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT run_id
+                FROM runs
+                ORDER BY datetime(updated_at) DESC, rowid DESC
+                """
+            ).fetchall()
+            ordered_ids = [row[0] for row in rows if row and row[0]]
+            keep_ids = set(ordered_ids[:keep_latest])
+            stale_ids = [run_id for run_id in ordered_ids if run_id not in keep_ids]
+            if stale_ids:
+                placeholders = ", ".join("?" for _ in stale_ids)
+                conn.execute(f"DELETE FROM runs WHERE run_id IN ({placeholders})", stale_ids)
+            return keep_ids

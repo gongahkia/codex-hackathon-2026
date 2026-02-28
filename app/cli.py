@@ -80,6 +80,11 @@ def run_command(
         "--resume-run-id",
         help="Resume an existing run id from the next unfinished pipeline state.",
     ),
+    retention_limit: int = typer.Option(
+        50,
+        "--retention-limit",
+        help="Maximum number of run records/artifact directories to retain.",
+    ),
     selected_option: Optional[int] = typer.Option(
         None,
         "--selected-option",
@@ -167,6 +172,7 @@ def run_command(
         feedback_checkpoints=parsed_feedback_checkpoints,
         strict_fail_fast=strict_fail_fast,
         resume_run_id=resume_run_id,
+        retention_limit=retention_limit,
         selected_option=selected_option,
         interactive_selection=interactive_selection,
         preferred_stack=preferred_stack,

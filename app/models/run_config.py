@@ -33,6 +33,7 @@ class RunConfig(BaseModel):
     feedback_checkpoints: List[int] = Field(default_factory=lambda: [25, 50, 75])
     strict_fail_fast: bool = False
     resume_run_id: Optional[str] = None
+    retention_limit: int = 50
     selected_option: Optional[int] = None
     interactive_selection: bool = False
     preferred_stack: Optional[str] = None
@@ -69,6 +70,13 @@ class RunConfig(BaseModel):
             return value
         if value < 1 or value > 10:
             raise ValueError("selected_option must be between 1 and 10")
+        return value
+
+    @field_validator("retention_limit")
+    @classmethod
+    def validate_retention_limit(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("retention_limit must be at least 1")
         return value
 
     @field_validator("feedback_checkpoints")

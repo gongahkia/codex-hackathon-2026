@@ -619,6 +619,7 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
             fatal_count=len(fatal_errors),
             last_error_code="",
         )
+        _enforce_run_retention(store, runs_root=Path("runs"), keep_latest=config.retention_limit)
         _append_note(notes_path, "RUN_DONE", f"recommendation={(selected.candidate.title if selected else '')}")
     except Exception as exc:
         fatal_error = redact_secrets(str(exc))
@@ -652,6 +653,7 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
             fatal_count=len(fatal_errors),
             last_error_code=_derive_error_code(fatal_error),
         )
+        _enforce_run_retention(store, runs_root=Path("runs"), keep_latest=config.retention_limit)
         _append_note(notes_path, "RUN_FAILED", fatal_error)
 
     return transitions
@@ -1355,3 +1357,23 @@ def _build_command_history(
             )
 
     return history
+
+
+def _enforce_run_retention(store: RunStore, *, runs_root: Path, keep_latest: int) -> None:
+    try:
+        keep_ids = store.prune_runs(keep_latest=keep_latest)
+    except Exception:
+        return
+
+    if not runs_root.exists():
+        return
+
+    for child in runs_root.iterdir():
+        if not child.is_dir():
+            continue
+        if child.name in keep_ids:
+            continue
+        try:
+            shutil.rmtree(child)
+        except Exception:
+            continue

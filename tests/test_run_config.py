@@ -36,6 +36,7 @@ def test_pause_for_feedback_defaults_to_false() -> None:
     assert cfg.pause_for_feedback is False
     assert cfg.strict_fail_fast is False
     assert cfg.resume_run_id is None
+    assert cfg.retention_limit == 50
 
 
 def test_feedback_checkpoints_are_unique_and_sorted() -> None:
@@ -53,3 +54,8 @@ def test_feedback_checkpoints_reject_out_of_bounds(value: int) -> None:
 def test_selected_option_rejects_out_of_bounds(value: int) -> None:
     with pytest.raises(ValidationError):
         RunConfig(problem_statement="x", deadline_hours=4, selected_option=value)
+
+
+def test_retention_limit_rejects_non_positive_values() -> None:
+    with pytest.raises(ValidationError):
+        RunConfig(problem_statement="x", deadline_hours=4, retention_limit=0)
