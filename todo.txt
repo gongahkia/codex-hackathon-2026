@@ -1,4 +1,3 @@
-(A) Implement URL canonicalizer in `app/services/url_tools.py` to normalize query params and trailing slashes +research +normalization
 (A) Implement candidate dedupe by canonical URL hash in `app/services/dedupe.py` +research +dedupe
 (A) Implement candidate dedupe by semantic title similarity threshold in `app/services/dedupe.py` +research +dedupe
 (A) Implement evidence extractor that detects code artifact links in `app/services/evidence.py` +research +evidence
