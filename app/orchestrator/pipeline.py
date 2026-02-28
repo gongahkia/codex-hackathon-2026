@@ -164,22 +164,34 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                 if not candidates:
                     raise RuntimeError("Cannot rank without research candidates")
 
+                weights = Weights(**config.weights)
                 ranked = rank_candidates(
                     candidates,
-                    Weights(**config.weights),
+                    weights,
                     problem_statement=config.problem_statement,
                     rubric_text=config.judging_rubric_text,
                     prize_tracks=config.prize_tracks,
                 )
+                ranking_warnings: list[str] = []
+                used_ranking_fallback = False
+                if not ranked:
+                    used_ranking_fallback = True
+                    ranking_warnings.append(
+                        "Ranking returned no options; injected deterministic fallback candidate."
+                    )
+                    ranked = [_build_ranking_fallback(candidates[0], weights)]
                 writer.write_json(
                     "ranking-preview.json",
                     {
                         "applied_rubric": bool(config.judging_rubric_text),
                         "prize_tracks": config.prize_tracks,
+                        "used_ranking_fallback": used_ranking_fallback,
+                        "ranking_warnings": ranking_warnings,
                         "ranked_candidates": [
                             {
                                 **_serialize_scored_candidate(item),
                                 "rank": index + 1,
+                                "fallback_injected": used_ranking_fallback and index == 0,
                             }
                             for index, item in enumerate(ranked[: config.option_count])
                         ],
@@ -188,11 +200,12 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                 _append_note(
                     notes_path,
                     "RANKING",
-                    f"ranked_count={len(ranked)} top_title={(ranked[0].candidate.title if ranked else 'none')}",
+                    (
+                        f"ranked_count={len(ranked)} "
+                        f"top_title={(ranked[0].candidate.title if ranked else 'none')} "
+                        f"fallback={used_ranking_fallback}"
+                    ),
                 )
-
-                if not ranked:
-                    raise RuntimeError("Ranking produced no candidates")
 
             if state == RunState.SELECTION:
                 if not ranked:
@@ -602,6 +615,21 @@ def _build_research_fallback_candidate(problem_statement: str) -> Candidate:
             "generated_from_problem_statement": problem_statement.strip(),
         },
         source="fallback",
+    )
+
+
+def _build_ranking_fallback(candidate: Candidate, weights: Weights) -> ScoredCandidate:
+    return ScoredCandidate(
+        candidate=candidate,
+        factors={
+            "relevance": 0.0,
+            "feasibility": 0.0,
+            "speed": 0.0,
+            "evidence": 0.0,
+        },
+        total_score=0.0,
+        applied_weights=weights.model_dump(),
+        track_fit=[],
     )
 
 

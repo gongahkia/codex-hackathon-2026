@@ -139,6 +139,38 @@ def test_pipeline_creates_deterministic_candidate_when_research_is_empty(
     assert selection["selected_source"] == "fallback"
 
 
+def test_pipeline_injects_fallback_ranked_option_when_ranking_returns_empty(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.execute_render_with_fallback",
+        lambda command, *, config_json, cwd, timeout_seconds=600: {
+            "rendered": False,
+            "fallback": True,
+            "reason": "no-remotion",
+            "command": " ".join(command),
+            "config": config_json,
+        },
+    )
+    monkeypatch.setattr("app.orchestrator.pipeline.rank_candidates", lambda *args, **kwargs: [])
+
+    config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
+    transitions = run_pipeline(config)
+    assert transitions[-1] == RunState.DONE
+
+    run_dirs = list((tmp_path / "runs").glob("*"))
+    assert run_dirs
+    ranking = json.loads(
+        (run_dirs[0] / "artifacts" / "ranking-preview.json").read_text(encoding="utf-8")
+    )
+
+    assert ranking["used_ranking_fallback"] is True
+    assert ranking["ranking_warnings"]
+    assert len(ranking["ranked_candidates"]) == 1
+    assert ranking["ranked_candidates"][0]["fallback_injected"] is True
+
+
 def test_pipeline_fails_when_completion_contract_is_not_met(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
