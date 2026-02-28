@@ -43,3 +43,12 @@ def rank_candidates(
         scored.append(ScoredCandidate(candidate=candidate, factors=factors, total_score=total))
 
     return sorted(scored, key=lambda item: item.total_score, reverse=True)
+
+
+def select_top_candidates(
+    ranked_candidates: Iterable[ScoredCandidate], option_count: int = 5
+) -> List[ScoredCandidate]:
+    """Return top-N ranked candidates with sane bounds."""
+
+    bounded = max(1, option_count)
+    return list(ranked_candidates)[:bounded]
