@@ -1,4 +1,3 @@
-(A) Implement `Weights` normalizer that rescales non-zero weights to sum 1.0 in `app/models/scoring.py` +core +model +scoring
 (A) Implement `Weights` validator that rejects negative values in `app/models/scoring.py` +core +model +scoring
 (A) Implement Typer command `last-minute run` in `app/cli.py` with flags mapped to `RunConfig` +cli +core +config
 (A) Implement interactive prompt fallback for missing required flags in `app/cli.py` +cli +core +config

@@ -1,6 +1,6 @@
 """Scoring-related models."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class Weights(BaseModel):
@@ -10,3 +10,16 @@ class Weights(BaseModel):
     feasibility: float = 0.30
     speed: float = 0.20
     evidence: float = 0.15
+
+    @model_validator(mode="after")
+    def normalize_non_zero_weights(self) -> "Weights":
+        fields = ("relevance", "feasibility", "speed", "evidence")
+        total = sum(getattr(self, field) for field in fields if getattr(self, field) != 0)
+        if total == 0:
+            return self
+
+        for field in fields:
+            value = getattr(self, field)
+            if value != 0:
+                setattr(self, field, value / total)
+        return self
