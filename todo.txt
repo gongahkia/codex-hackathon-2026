@@ -1,4 +1,3 @@
-(A) Implement feature extraction for relevance score in `app/scoring/relevance.py` +scoring +ranking
 (A) Implement feature extraction for feasibility score in `app/scoring/feasibility.py` +scoring +ranking
 (A) Implement feature extraction for speed-to-build score in `app/scoring/speed.py` +scoring +ranking
 (A) Implement feature extraction for evidence quality score in `app/scoring/evidence_quality.py` +scoring +ranking
