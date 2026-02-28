@@ -1,4 +1,3 @@
-(A) Implement sandboxed command allowlist for build and test commands in `app/security/command_policy.py` +security +runtime
 (A) Implement secret redaction filter for logs in `app/security/redaction.py` +security +telemetry
 (A) Implement final output assembler in `app/output/final_report.py` with summary, matrix, implementation, tests, and video sections +output +core
 (A) Implement machine-readable JSON output writer in `app/output/final_report.py` +output +core
