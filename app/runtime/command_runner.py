@@ -78,9 +78,22 @@ def run_command_streamed(
                 on_output(stripped)
 
     process.wait()
+    if timed_out:
+        if process.stdout is not None:
+            remainder = process.stdout.read()
+            if remainder:
+                for line in remainder.splitlines():
+                    stdout_lines.append(redact_secrets(line))
+        if process.stderr is not None:
+            remainder = process.stderr.read()
+            if remainder:
+                for line in remainder.splitlines():
+                    stderr_lines.append(redact_secrets(line))
+
+    returncode = 124 if timed_out else process.returncode
     duration_ms = int((time.monotonic() - start) * 1000)
     return CommandResult(
-        returncode=process.returncode,
+        returncode=returncode,
         stdout="\n".join(stdout_lines),
         stderr="\n".join(stderr_lines),
         timed_out=timed_out,
