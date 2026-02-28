@@ -154,3 +154,37 @@ def test_ranking_penalizes_low_detail_summaries() -> None:
     assert ranked[0].candidate.title == "Detailed Summary"
     assert "ranking_penalties" in low_detail.signals
     assert "content_detail_penalty" in ranked[1].factors
+
+
+def test_ranking_uses_track_fit_and_evidence_for_tie_breaks() -> None:
+    education_candidate = Candidate(
+        title="Education Candidate",
+        summary=(
+            "Comprehensive education assistant for classrooms with planning, "
+            "grading workflows, and project evidence links."
+        ),
+        urls=["https://github.com/acme/edu", "https://devpost.com/software/edu"],
+        stack=["Next.js"],
+        signals={"setup_steps": 2, "complexity": "low"},
+        source="github",
+    )
+    generic_candidate = Candidate(
+        title="Generic Candidate",
+        summary=(
+            "Comprehensive assistant for workflows with planning, grading workflows, "
+            "and project evidence links."
+        ),
+        urls=["https://github.com/acme/generic", "https://devpost.com/software/generic"],
+        stack=["Next.js"],
+        signals={"setup_steps": 2, "complexity": "low"},
+        source="github",
+    )
+
+    ranked = rank_candidates(
+        [generic_candidate, education_candidate],
+        Weights(),
+        problem_statement="",
+        prize_tracks=["Education Prize"],
+    )
+
+    assert ranked[0].candidate.title == "Education Candidate"

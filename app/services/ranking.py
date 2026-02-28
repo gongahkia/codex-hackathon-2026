@@ -62,7 +62,15 @@ def rank_candidates(
             )
         )
 
-    return sorted(scored, key=lambda item: item.total_score, reverse=True)
+    return sorted(
+        scored,
+        key=lambda item: (
+            -item.total_score,
+            -_top_track_fit_score(item),
+            -float(item.factors.get("evidence", 0.0)),
+            item.candidate.title.lower(),
+        ),
+    )
 
 
 def _apply_unreachable_evidence_penalty(
@@ -115,6 +123,12 @@ def _apply_low_detail_penalty(
     reasons = candidate.signals.setdefault("ranking_penalties", [])
     if isinstance(reasons, list):
         reasons.append("Low-detail summary; relevance score penalized")
+
+
+def _top_track_fit_score(item: ScoredCandidate) -> float:
+    if not item.track_fit:
+        return 0.0
+    return max(float(rec.fit_score) for rec in item.track_fit)
 
 
 def select_top_candidates(
