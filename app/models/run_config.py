@@ -30,6 +30,7 @@ class RunConfig(BaseModel):
     weights: Dict[str, float] = Field(default_factory=lambda: DEFAULT_WEIGHTS.copy())
     include_reddit: bool = False
     pause_for_feedback: bool = False
+    feedback_checkpoints: List[int] = Field(default_factory=lambda: [25, 50, 75])
     selected_option: Optional[int] = None
     interactive_selection: bool = False
     preferred_stack: Optional[str] = None
@@ -67,3 +68,19 @@ class RunConfig(BaseModel):
         if value < 1 or value > 10:
             raise ValueError("selected_option must be between 1 and 10")
         return value
+
+    @field_validator("feedback_checkpoints")
+    @classmethod
+    def validate_feedback_checkpoints(cls, value: List[int]) -> List[int]:
+        unique: List[int] = []
+        seen: set[int] = set()
+        for checkpoint in value:
+            if checkpoint < 1 or checkpoint > 99:
+                raise ValueError("feedback_checkpoints values must be between 1 and 99")
+            if checkpoint in seen:
+                continue
+            seen.add(checkpoint)
+            unique.append(checkpoint)
+        if not unique:
+            raise ValueError("feedback_checkpoints must contain at least one value")
+        return sorted(unique)

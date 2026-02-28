@@ -42,3 +42,54 @@ def test_cli_e2e_run_with_fixture_pipeline(monkeypatch) -> None:
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert payload["problem_statement"] == "Build AI todo app"
+
+
+def test_cli_maps_feedback_flags_into_run_config(monkeypatch) -> None:
+    runner = CliRunner()
+
+    def fake_run_pipeline(config):
+        assert config.pause_for_feedback is True
+        assert config.feedback_checkpoints == [30, 60]
+        return [RunState.INTAKE, RunState.DONE]
+
+    monkeypatch.setattr("app.cli.run_pipeline", fake_run_pipeline)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--problem-statement",
+            "Build AI todo app",
+            "--deadline-hours",
+            "6",
+            "--pause-for-feedback",
+            "--feedback-checkpoints",
+            "60,30,60",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["pause_for_feedback"] is True
+    assert payload["feedback_checkpoints"] == [30, 60]
+
+
+def test_cli_rejects_invalid_feedback_checkpoints(monkeypatch) -> None:
+    runner = CliRunner()
+    monkeypatch.setattr("app.cli.run_pipeline", lambda config: [RunState.INTAKE, RunState.DONE])
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--problem-statement",
+            "Build AI todo app",
+            "--deadline-hours",
+            "6",
+            "--feedback-checkpoints",
+            "bad,50",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "feedback_checkpoints must contain integers only" in result.output

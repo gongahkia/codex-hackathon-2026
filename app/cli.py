@@ -24,6 +24,23 @@ def main() -> None:
     """last-minute CLI root command group."""
 
 
+def _parse_feedback_checkpoints(raw_value: str) -> list[int]:
+    tokens = [token.strip() for token in raw_value.split(",") if token.strip()]
+    if not tokens:
+        raise ValueError("feedback_checkpoints must contain comma-separated integers")
+
+    checkpoints: list[int] = []
+    for token in tokens:
+        if not token.isdigit():
+            raise ValueError("feedback_checkpoints must contain integers only")
+        checkpoint = int(token)
+        if checkpoint < 1 or checkpoint > 99:
+            raise ValueError("feedback_checkpoints values must be between 1 and 99")
+        checkpoints.append(checkpoint)
+
+    return sorted(set(checkpoints))
+
+
 @app.command("run")
 def run_command(
     problem_statement: Optional[str] = typer.Option(None, "--problem-statement", "-p"),
@@ -43,6 +60,16 @@ def run_command(
     evidence_weight: float = typer.Option(DEFAULT_WEIGHTS["evidence"], "--evidence-weight"),
     include_reddit: bool = typer.Option(False, "--include-reddit"),
     reddit_confirmation: Optional[str] = typer.Option(None, "--reddit-confirmation"),
+    pause_for_feedback: bool = typer.Option(
+        False,
+        "--pause-for-feedback",
+        help="Enable interactive feedback checkpoints.",
+    ),
+    feedback_checkpoints: str = typer.Option(
+        "25,50,75",
+        "--feedback-checkpoints",
+        help="Comma-separated checkpoint percentages for interactive feedback.",
+    ),
     selected_option: Optional[int] = typer.Option(
         None,
         "--selected-option",
@@ -106,6 +133,13 @@ def run_command(
         speed=speed_weight,
         evidence=evidence_weight,
     )
+
+    try:
+        parsed_feedback_checkpoints = _parse_feedback_checkpoints(feedback_checkpoints)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+
     config = RunConfig(
         problem_statement=intake.problem_statement,
         hackathon_url=intake.source_url,
@@ -119,6 +153,8 @@ def run_command(
         option_count=option_count,
         weights=normalized_weights.model_dump(),
         include_reddit=include_reddit,
+        pause_for_feedback=pause_for_feedback,
+        feedback_checkpoints=parsed_feedback_checkpoints,
         selected_option=selected_option,
         interactive_selection=interactive_selection,
         preferred_stack=preferred_stack,

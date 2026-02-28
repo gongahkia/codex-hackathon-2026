@@ -36,6 +36,17 @@ def test_pause_for_feedback_defaults_to_false() -> None:
     assert cfg.pause_for_feedback is False
 
 
+def test_feedback_checkpoints_are_unique_and_sorted() -> None:
+    cfg = RunConfig(problem_statement="x", deadline_hours=4, feedback_checkpoints=[75, 25, 75, 50])
+    assert cfg.feedback_checkpoints == [25, 50, 75]
+
+
+@pytest.mark.parametrize("value", [0, 100])
+def test_feedback_checkpoints_reject_out_of_bounds(value: int) -> None:
+    with pytest.raises(ValidationError):
+        RunConfig(problem_statement="x", deadline_hours=4, feedback_checkpoints=[value])
+
+
 @pytest.mark.parametrize("value", [0, 11])
 def test_selected_option_rejects_out_of_bounds(value: int) -> None:
     with pytest.raises(ValidationError):
