@@ -1,0 +1,99 @@
+(A) Implement `RunConfig` validator that rejects `deadline_hours` outside 1-24 in `app/models/run_config.py` +core +model +config
+(A) Implement `RunConfig` validator that clamps `option_count` to 1-10 in `app/models/run_config.py` +core +model +config
+(A) Implement `Weights` model in `app/models/scoring.py` with `relevance`, `feasibility`, `speed`, and `evidence` floats +core +model +scoring
+(A) Implement `Weights` normalizer that rescales non-zero weights to sum 1.0 in `app/models/scoring.py` +core +model +scoring
+(A) Implement `Weights` validator that rejects negative values in `app/models/scoring.py` +core +model +scoring
+(A) Implement Typer command `last-minute run` in `app/cli.py` with flags mapped to `RunConfig` +cli +core +config
+(A) Implement interactive prompt fallback for missing required flags in `app/cli.py` +cli +core +config
+(A) Implement mode parser that defaults to `detailed-live` and accepts `fast` in `app/services/mode.py` +core +config
+(A) Implement `time_budget_splitter` that reserves implementation and testing time before research in `app/services/time_budget.py` +core +budget
+(A) Implement `BudgetSnapshot` model with per-phase minute allocations in `app/models/time_budget.py` +core +budget +model
+(A) Implement deadline overrun guard that aborts low-priority phases when `remaining_minutes <= 0` in `app/services/deadline_guard.py` +core +budget
+(A) Implement run state machine enum in `app/models/run_state.py` with `INTAKE`, `RESEARCH`, `RANKING`, `SELECTION`, `BUILD`, `TEST`, `VIDEO`, `DONE`, `FAILED` +core +model
+(A) Implement orchestrator `run_pipeline(config)` in `app/orchestrator/pipeline.py` that transitions through run states +core +orchestrator
+(A) Implement structured run context object carrying config, budget, artifacts, and telemetry in `app/orchestrator/context.py` +core +orchestrator
+(A) Implement source adapter interface `SourceAdapter.search(problem, limit)` in `app/sources/base.py` +research +source
+(A) Implement DoraHacks adapter in `app/sources/dorahacks.py` returning normalized candidate records +research +source-dorahacks
+(A) Implement Devpost adapter in `app/sources/devpost.py` returning normalized candidate records +research +source-devpost
+(A) Implement GitHub adapter in `app/sources/github.py` that searches repos by prompt keywords and README matches +research +source-github
+(A) Implement optional Reddit adapter in `app/sources/reddit.py` behind explicit `include_reddit` flag +research +source-reddit
+(A) Implement Reddit noise disclaimer gate in `app/services/source_policy.py` that requires explicit user confirmation +research +source-reddit +policy
+(A) Implement source registry in `app/sources/registry.py` with required defaults DoraHacks, Devpost, and GitHub +research +source
+(A) Implement fast mode source limits in `app/services/mode_policy.py` to reduce per-source query depth +research +budget +mode
+(A) Implement detailed mode source limits in `app/services/mode_policy.py` to increase per-source query depth +research +budget +mode
+(A) Implement candidate schema in `app/models/candidate.py` with title, summary, urls, stack, signals, and source fields +research +model
+(A) Implement URL canonicalizer in `app/services/url_tools.py` to normalize query params and trailing slashes +research +normalization
+(A) Implement candidate dedupe by canonical URL hash in `app/services/dedupe.py` +research +dedupe
+(A) Implement candidate dedupe by semantic title similarity threshold in `app/services/dedupe.py` +research +dedupe
+(A) Implement evidence extractor that detects code artifact links in `app/services/evidence.py` +research +evidence
+(A) Implement evidence extractor that detects build writeup links in `app/services/evidence.py` +research +evidence
+(A) Implement evidence extractor that counts independent source domains in `app/services/evidence.py` +research +evidence
+(A) Implement minimum evidence gate in `app/services/evidence_gate.py` requiring code link, writeup link, and two source types +research +evidence
+(A) Implement stale repo detector using last commit date threshold in `app/services/repo_freshness.py` +research +quality
+(A) Implement low-detail detector for short spam-like descriptions in `app/services/content_quality.py` +research +quality
+(A) Implement quality penalty calculator in `app/services/quality_penalty.py` for stale and weak evidence signals +research +quality +scoring
+(A) Implement feature extraction for relevance score in `app/scoring/relevance.py` +scoring +ranking
+(A) Implement feature extraction for feasibility score in `app/scoring/feasibility.py` +scoring +ranking
+(A) Implement feature extraction for speed-to-build score in `app/scoring/speed.py` +scoring +ranking
+(A) Implement feature extraction for evidence quality score in `app/scoring/evidence_quality.py` +scoring +ranking
+(A) Implement weighted score aggregator in `app/scoring/aggregate.py` using normalized user weights +scoring +ranking
+(A) Implement ranking service `rank_candidates(candidates, weights)` in `app/services/ranking.py` +scoring +ranking
+(A) Implement top-N selector honoring `option_count` default 5 in `app/services/ranking.py` +scoring +ranking
+(A) Implement recommendation chooser selecting highest valid score above evidence gate in `app/services/recommendation.py` +scoring +ranking
+(A) Implement fallback recommendation path when all candidates fail evidence gate in `app/services/recommendation.py` +scoring +ranking
+(A) Implement short recommendation summary renderer in `app/output/summary.py` +output +ranking
+(A) Implement detailed matrix renderer with per-factor scores and source links in `app/output/matrix.py` +output +ranking
+(A) Implement explicit user selection prompt that blocks build phase until option index is chosen in `app/services/selection.py` +selection +core
+(A) Implement chosen-option artifact model in `app/models/selection.py` storing selected candidate and rationale +selection +model
+(A) Implement project spec generator from selected candidate in `app/planner/project_spec.py` with features, stack, and milestones +planner +builder
+(A) Implement deadline-aware scope trimmer that drops non-core features when budget risk rises in `app/planner/scope_trimmer.py` +planner +budget +builder
+(A) Implement build plan model with ordered tasks and time estimates in `app/models/build_plan.py` +planner +model +builder
+(A) Implement stack resolver that picks fastest default stack when user has no preference in `app/planner/stack_resolver.py` +planner +builder
+(A) Implement one-click deploy target resolver preferring Vercel or Render based on selected stack in `app/planner/deploy_resolver.py` +planner +deploy
+(A) Implement localhost fallback deployment plan when one-click deploy integration is unavailable in `app/planner/deploy_resolver.py` +planner +deploy
+(A) Implement code generation interface `CodeGenerator.generate(spec)` in `app/generation/base.py` +builder +generation
+(A) Implement web app generator adapter in `app/generation/web_app.py` for core CRUD or workflow apps +builder +generation
+(A) Implement API app generator adapter in `app/generation/api_app.py` for service-style prompts +builder +generation
+(A) Implement generated project writer that materializes files under `runs/<run_id>/project` in `app/generation/writer.py` +builder +generation +storage
+(A) Implement command runner with timeout and streamed logs in `app/runtime/command_runner.py` +builder +runtime
+(A) Implement dependency install runner with retry and backoff in `app/runtime/install.py` +builder +runtime
+(A) Implement dev server health check probe for generated app in `app/runtime/healthcheck.py` +builder +runtime
+(A) Implement deploy command executor for supported one-click providers in `app/runtime/deploy.py` +deploy +runtime
+(A) Implement localhost run command fallback executor in `app/runtime/deploy.py` +deploy +runtime
+(A) Implement test plan selector that attempts E2E first then integration then smoke by remaining minutes in `app/testing/strategy.py` +testing +budget
+(A) Implement Playwright E2E runner adapter in `app/testing/e2e_playwright.py` +testing +e2e
+(A) Implement pytest integration runner adapter in `app/testing/integration_pytest.py` +testing +integration
+(A) Implement vitest integration runner adapter in `app/testing/integration_vitest.py` +testing +integration
+(A) Implement smoke test runner that verifies app boot and key endpoint response in `app/testing/smoke.py` +testing +smoke
+(A) Implement test fallback controller that downgrades to next level on setup failure in `app/testing/fallback.py` +testing +budget
+(A) Implement testing report model with executed suite, pass rate, and skipped reasons in `app/models/testing_report.py` +testing +model +output
+(A) Implement Remotion scene spec model in `app/models/video.py` with style and duration fields +video +remotion +model
+(A) Implement pitch-style storyboard generator in `app/video/storyboards/pitch.py` +video +remotion
+(A) Implement walkthrough storyboard generator in `app/video/storyboards/walkthrough.py` +video +remotion
+(A) Implement Remotion script composer that emits scene config JSON in `app/video/remotion_config.py` +video +remotion
+(A) Implement Remotion render command builder that outputs reproducible CLI command in `app/video/render_command.py` +video +remotion
+(A) Implement auto-render executor for MP4 artifact with timeout guard in `app/video/render_executor.py` +video +remotion +runtime
+(A) Implement video fallback that outputs config and command when render dependencies are missing in `app/video/render_executor.py` +video +remotion +runtime
+(A) Implement run artifact registry storing paths for matrix, project, tests, and video in `app/storage/artifacts.py` +storage +output
+(A) Implement SQLite run store for config, state transitions, and final status in `app/storage/run_store.py` +storage +db
+(A) Implement cache layer for source query results keyed by normalized prompt in `app/storage/cache.py` +storage +cache +research
+(A) Implement cache TTL policy that expires stale source results in `app/storage/cache.py` +storage +cache +research
+(A) Implement structured JSON logger with run_id correlation in `app/telemetry/logging.py` +telemetry +core
+(A) Implement phase timing collector for each pipeline stage in `app/telemetry/timings.py` +telemetry +budget
+(A) Implement progress event emitter for CLI status updates in `app/telemetry/progress.py` +telemetry +cli
+(A) Implement retry policy wrapper with jitter for source adapters in `app/resilience/retry.py` +resilience +research
+(A) Implement circuit breaker for repeatedly failing source adapters in `app/resilience/circuit_breaker.py` +resilience +research
+(A) Implement per-source timeout guard to prevent research starvation in `app/resilience/timeouts.py` +resilience +research +budget
+(A) Implement sandboxed command allowlist for build and test commands in `app/security/command_policy.py` +security +runtime
+(A) Implement secret redaction filter for logs in `app/security/redaction.py` +security +telemetry
+(A) Implement final output assembler in `app/output/final_report.py` with summary, matrix, implementation, tests, and video sections +output +core
+(A) Implement machine-readable JSON output writer in `app/output/final_report.py` +output +core
+(A) Implement non-zero exit codes for terminal failure states in `app/cli.py` +cli +core
+(B) Implement unit tests for `RunConfig` validation boundaries in `tests/test_run_config.py` +testing +unit
+(B) Implement unit tests for weight normalization and negative input rejection in `tests/test_scoring_weights.py` +testing +unit
+(B) Implement unit tests for deadline budget splitting invariants in `tests/test_time_budget.py` +testing +unit
+(B) Implement unit tests for evidence gate pass and fail paths in `tests/test_evidence_gate.py` +testing +unit
+(B) Implement integration test for research to ranking pipeline with mocked sources in `tests/test_pipeline_research_ranking.py` +testing +integration
+(B) Implement integration test for Remotion fallback when renderer is unavailable in `tests/test_video_fallback.py` +testing +integration
+(B) Implement end-to-end CLI test that runs full pipeline with fixture adapters in `tests/test_cli_e2e_run.py` +testing +e2e
+(B) Implement end-to-end CLI test that verifies Reddit opt-in disclaimer enforcement in `tests/test_cli_reddit_optin.py` +testing +e2e
