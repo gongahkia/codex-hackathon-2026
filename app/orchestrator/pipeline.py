@@ -89,8 +89,9 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
     testing_report: Dict[str, Any] | None = None
     reliability_report: Dict[str, Any] | None = None
     deployment_health_report: Dict[str, Any] | None = None
-    phase_warnings: list[str] = []
-    phase_recoveries: list[str] = []
+    warnings: list[str] = []
+    recoveries: list[str] = []
+    fatal_errors: list[str] = []
 
     try:
         for state in PIPELINE_ORDER:
@@ -317,6 +318,8 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                             raise
                         health_warning = redact_secrets(str(exc))
                         _append_note(notes_path, "WARNING", f"deployment_health: {health_warning}")
+                        warnings.append(f"TEST: deployment_health: {health_warning}")
+                        recoveries.append("TEST")
                         try:
                             health_report = watch_deployment_health(
                                 config.deployment_health_url,
@@ -365,10 +368,10 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                     },
                 )
                 _append_note(notes_path, "WARNING", f"state={state.value} error={message}")
-                phase_warnings.append(f"{state.value}: {message}")
+                warnings.append(f"{state.value}: {message}")
                 if config.strict_fail_fast:
                     raise
-                phase_recoveries.append(state.value)
+                recoveries.append(state.value)
                 continue
 
         completion = _evaluate_completion_contract(
@@ -396,6 +399,18 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
             if config.strict_fail_fast:
                 raise RuntimeError(completion_warning)
             _append_note(notes_path, "WARNING", completion_warning)
+            warnings.append(completion_warning)
+            recoveries.append("COMPLETION")
+
+        writer.write_json(
+            "run-outcome.json",
+            {
+                "done": True,
+                "warnings": warnings,
+                "recoveries": recoveries,
+                "fatal_errors": fatal_errors,
+            },
+        )
 
         transitions.append(RunState.DONE)
         store.append_transition(run_id, RunState.DONE.value)
@@ -406,11 +421,22 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
         )
         _append_note(notes_path, "RUN_DONE", f"recommendation={(selected.candidate.title if selected else '')}")
     except Exception as exc:
-        writer.write_json("pipeline-error.json", {"error": redact_secrets(str(exc))})
+        fatal_error = redact_secrets(str(exc))
+        fatal_errors.append(fatal_error)
+        writer.write_json("pipeline-error.json", {"error": fatal_error})
+        writer.write_json(
+            "run-outcome.json",
+            {
+                "done": False,
+                "warnings": warnings,
+                "recoveries": recoveries,
+                "fatal_errors": fatal_errors,
+            },
+        )
         transitions.append(RunState.FAILED)
         store.append_transition(run_id, RunState.FAILED.value)
         store.set_final_status(run_id, RunState.FAILED.value)
-        _append_note(notes_path, "RUN_FAILED", redact_secrets(str(exc)))
+        _append_note(notes_path, "RUN_FAILED", fatal_error)
 
     return transitions
 

@@ -35,6 +35,7 @@ def test_pipeline_writes_research_and_selection_artifacts(monkeypatch, tmp_path:
     assert (artifacts / "build-generation.json").exists()
     assert (artifacts / "testing-report.json").exists()
     assert (artifacts / "completion-contract.json").exists()
+    assert (artifacts / "run-outcome.json").exists()
     assert (run_dirs[0] / "codex-notes.log").exists()
 
     ranking = json.loads((artifacts / "ranking-preview.json").read_text(encoding="utf-8"))
@@ -44,6 +45,9 @@ def test_pipeline_writes_research_and_selection_artifacts(monkeypatch, tmp_path:
     completion = json.loads((artifacts / "completion-contract.json").read_text(encoding="utf-8"))
     assert completion["passed"] is True
     assert completion["checks"]["tests_passed"] is True
+    run_outcome = json.loads((artifacts / "run-outcome.json").read_text(encoding="utf-8"))
+    assert run_outcome["done"] is True
+    assert run_outcome["fatal_errors"] == []
 
 
 def test_pipeline_auto_falls_back_to_top_candidate_when_evidence_gate_fails(
@@ -271,6 +275,14 @@ def test_pipeline_fails_when_completion_contract_is_not_met_in_strict_mode(
     )
     transitions = run_pipeline(config)
     assert transitions[-1] == RunState.FAILED
+
+    run_dirs = list((tmp_path / "runs").glob("*"))
+    assert run_dirs
+    run_outcome = json.loads(
+        (run_dirs[0] / "artifacts" / "run-outcome.json").read_text(encoding="utf-8")
+    )
+    assert run_outcome["done"] is False
+    assert run_outcome["fatal_errors"]
 
 
 def test_pipeline_skips_interactive_prompt_when_pause_for_feedback_is_disabled(
