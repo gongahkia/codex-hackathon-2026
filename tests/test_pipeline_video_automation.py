@@ -12,9 +12,19 @@ def test_pipeline_auto_generates_video_artifacts(monkeypatch, tmp_path: Path) ->
     monkeypatch.chdir(tmp_path)
 
     def fake_execute_render_with_fallback(command, *, config_json, cwd, timeout_seconds=600):
-        assert command[:3] == ["npx", "remotion", "render"]
+        assert command[:7] == [
+            "npm",
+            "exec",
+            "--yes",
+            "--package=@remotion/cli@4.0.429",
+            "--",
+            "remotion",
+            "render",
+        ]
+        assert command[7].endswith("/remotion/index.jsx")
         assert "scenes" in config_json
-        assert cwd == Path.cwd()
+        assert Path(cwd).name == "video"
+        assert Path(cwd).exists()
         return {
             "rendered": False,
             "fallback": True,
@@ -39,9 +49,11 @@ def test_pipeline_auto_generates_video_artifacts(monkeypatch, tmp_path: Path) ->
     artifacts_dir = run_roots[0] / "artifacts"
     config_path = artifacts_dir / "remotion.config.json"
     result_path = artifacts_dir / "video-result.json"
+    video_entry = run_roots[0] / "video" / "remotion" / "index.jsx"
 
     assert config_path.exists()
     assert result_path.exists()
+    assert video_entry.exists()
 
     payload = json.loads(result_path.read_text(encoding="utf-8"))
     assert payload["fallback"] is True

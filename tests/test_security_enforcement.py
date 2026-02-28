@@ -34,6 +34,11 @@ def test_url_policy_rejects_loopback_address() -> None:
         validate_safe_url("https://127.0.0.1", UrlPolicy())
 
 
+def test_url_policy_allows_localhost_when_opted_in() -> None:
+    policy = UrlPolicy(allowed_schemes=("https", "http"), allow_localhost=True)
+    validate_safe_url("http://localhost:3000/health", policy)
+
+
 def test_safe_artifact_writer_blocks_traversal(tmp_path: Path) -> None:
     writer = SafeArtifactWriter(tmp_path / "artifacts")
     with pytest.raises(ValueError):

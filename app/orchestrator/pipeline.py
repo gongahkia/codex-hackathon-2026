@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
+from app.generation.api_app import APIAppGenerator
+from app.generation.web_app import WebAppGenerator
 from app.models.candidate import Candidate
 from app.models.run_config import RunConfig
 from app.models.run_state import RunState
@@ -18,15 +19,25 @@ from app.planner.project_spec import ProjectSpec
 from app.runtime.command_runner import CommandResult
 from app.runtime.demo_reliability import run_demo_reliability_mode
 from app.runtime.deployment_watch import enforce_deployment_health
+from app.runtime.healthcheck import probe_dev_server
+from app.runtime.install import run_dependency_install
 from app.security.redaction import redact_secrets
 from app.security.url_policy import UrlPolicy
 from app.services.dedupe import dedupe_by_title_similarity, dedupe_by_url_hash
+from app.services.evidence_gate import passes_minimum_evidence
 from app.services.mode_policy import detailed_mode_source_limits, fast_mode_source_limits
 from app.services.ranking import ScoredCandidate, rank_candidates
 from app.services.recommendation import choose_recommendation
+from app.services.selection import prompt_for_selection
 from app.sources.registry import build_source_registry
 from app.storage import RunStore, SafeArtifactWriter
+from app.testing.e2e_playwright import run_playwright_e2e
+from app.testing.fallback import run_tests_with_fallback
+from app.testing.integration_pytest import run_pytest_integration
+from app.testing.integration_vitest import run_vitest_integration
+from app.testing.strategy import select_test_plan
 from app.video.pitch_narrative import optimize_pitch_narrative
+from app.video.project_bundle import ensure_remotion_bundle
 from app.video.remotion_config import compose_remotion_config
 from app.video.render_command import build_remotion_render_command
 from app.video.render_executor import execute_render_with_fallback
@@ -48,8 +59,15 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
     """Run the pipeline and record state transitions."""
 
     run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
-    artifacts_dir = Path("runs") / run_id / "artifacts"
+    run_root = Path("runs") / run_id
+    artifacts_dir = run_root / "artifacts"
+    project_dir = run_root / "project"
+    notes_path = run_root / "codex-notes.log"
+
     writer = SafeArtifactWriter(artifacts_dir)
+    project_writer = SafeArtifactWriter(project_dir)
+
+    _append_note(notes_path, "RUN_START", f"problem={config.problem_statement!r} mode={config.mode}")
 
     store = RunStore(db_path="runs.db")
     store.save_config(run_id, config.model_dump())
@@ -59,11 +77,17 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
     candidates: list[Candidate] = []
     ranked: list[ScoredCandidate] = []
     selected: ScoredCandidate | None = None
+    generated_files: list[str] = []
+    build_execution: Dict[str, Any] | None = None
+    testing_report: Dict[str, Any] | None = None
+    reliability_report: Dict[str, Any] | None = None
+    deployment_health_report: Dict[str, Any] | None = None
 
     try:
         for state in PIPELINE_ORDER:
             transitions.append(state)
             store.append_transition(run_id, state.value)
+            _append_note(notes_path, "STATE", state.value)
 
             if state == RunState.INTAKE:
                 writer.write_json(
@@ -76,13 +100,19 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                         "judging_rubric_text": config.judging_rubric_text,
                         "prize_tracks": config.prize_tracks,
                         "judging_notes": config.judging_notes,
+                        "selected_option": config.selected_option,
+                        "interactive_selection": config.interactive_selection,
+                        "allow_local_health": config.allow_local_health,
+                        "run_log_path": str(notes_path.resolve()),
                     },
                 )
 
             if state == RunState.RESEARCH:
                 policy = UrlPolicy()
                 registry = build_source_registry(include_reddit=config.include_reddit, policy=policy)
-                source_limits = fast_mode_source_limits() if config.mode == "fast" else detailed_mode_source_limits()
+                source_limits = (
+                    fast_mode_source_limits() if config.mode == "fast" else detailed_mode_source_limits()
+                )
 
                 gathered: list[Candidate] = []
                 per_source: dict[str, int] = {}
@@ -108,6 +138,11 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                         "per_source": per_source,
                     },
                 )
+                _append_note(
+                    notes_path,
+                    "RESEARCH",
+                    f"raw={len(gathered)} deduped={len(candidates)} per_source={per_source}",
+                )
 
                 if not candidates:
                     raise RuntimeError("No candidates found from configured sources")
@@ -129,10 +164,18 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                         "applied_rubric": bool(config.judging_rubric_text),
                         "prize_tracks": config.prize_tracks,
                         "ranked_candidates": [
-                            _serialize_scored_candidate(item)
-                            for item in ranked[: config.option_count]
+                            {
+                                **_serialize_scored_candidate(item),
+                                "rank": index + 1,
+                            }
+                            for index, item in enumerate(ranked[: config.option_count])
                         ],
                     },
+                )
+                _append_note(
+                    notes_path,
+                    "RANKING",
+                    f"ranked_count={len(ranked)} top_title={(ranked[0].candidate.title if ranked else 'none')}",
                 )
 
                 if not ranked:
@@ -141,8 +184,8 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
             if state == RunState.SELECTION:
                 if not ranked:
                     raise RuntimeError("Selection requires ranked candidates")
-                selected = choose_recommendation(ranked)
 
+                selected, selection_mode, selected_rank = _select_candidate(config, ranked)
                 writer.write_json(
                     "selection.json",
                     {
@@ -151,8 +194,14 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                         "total_score": selected.total_score,
                         "selected_urls": selected.candidate.urls,
                         "evidence_gate_passed": True,
-                        "rationale": "Highest-scored candidate passing evidence gate",
+                        "selection_mode": selection_mode,
+                        "selected_rank": selected_rank,
                     },
+                )
+                _append_note(
+                    notes_path,
+                    "SELECTION",
+                    f"mode={selection_mode} rank={selected_rank} title={selected.candidate.title}",
                 )
 
             if state == RunState.BUILD:
@@ -165,10 +214,29 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                     "checkpoint-replan.json",
                     {
                         "project_spec": spec.model_dump(),
-                        "decisions": [
-                            _serialize_checkpoint_decision(decision) for decision in decisions
-                        ],
+                        "decisions": [_serialize_checkpoint_decision(decision) for decision in decisions],
                     },
+                )
+
+                generator_name, files = _generate_project_files(spec)
+                for relative_path, content in files.items():
+                    project_writer.write_text(relative_path, content)
+
+                build_execution = _run_build_execution(project_writer.root)
+                generated_files = sorted(files.keys())
+                writer.write_json(
+                    "build-generation.json",
+                    {
+                        "generator": generator_name,
+                        "project_root": str(project_writer.root),
+                        "generated_files": generated_files,
+                        "build_execution": build_execution,
+                    },
+                )
+                _append_note(
+                    notes_path,
+                    "BUILD",
+                    f"generator={generator_name} files={len(files)} install_status={build_execution.get('status')}",
                 )
 
                 submission = generate_submission_artifact(
@@ -194,19 +262,35 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                     artifacts_dir=artifacts_dir,
                     health_url=config.deployment_health_url,
                     demo_route=config.demo_route,
+                    allow_local_health=config.allow_local_health,
                 )
-                writer.write_json("demo-reliability.json", reliability.to_dict())
+                reliability_report = reliability.to_dict()
+                writer.write_json("demo-reliability.json", reliability_report)
 
-                health_report = enforce_deployment_health(config.deployment_health_url)
-                writer.write_json("deployment-health.json", health_report.to_dict())
+                if config.allow_local_health:
+                    health_report = enforce_deployment_health(
+                        config.deployment_health_url,
+                        policy=_runtime_health_policy(True),
+                    )
+                else:
+                    health_report = enforce_deployment_health(config.deployment_health_url)
+                deployment_health_report = health_report.to_dict()
+                writer.write_json("deployment-health.json", deployment_health_report)
 
-                writer.write_json(
-                    "testing-report.json",
-                    _build_testing_report(config.deadline_hours),
+                testing_report = _execute_testing_fallback(
+                    config=config,
+                    project_root=project_writer.root,
+                    health_url=config.deployment_health_url,
+                )
+                writer.write_json("testing-report.json", testing_report)
+                _append_note(
+                    notes_path,
+                    "TEST",
+                    f"executed_suite={testing_report['executed_suite']} pass_rate={testing_report['pass_rate']}",
                 )
 
             if state == RunState.VIDEO:
-                _auto_generate_video(config, writer)
+                _auto_generate_video(config, writer, run_root)
                 if spec is None:
                     spec = _default_build_spec(config, selected)
 
@@ -218,6 +302,25 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                 )
                 writer.write_json("pitch-narrative.json", pitch_scripts)
 
+        completion = _evaluate_completion_contract(
+            artifacts_dir=artifacts_dir,
+            selected=selected,
+            generated_files=generated_files,
+            build_execution=build_execution,
+            testing_report=testing_report,
+            reliability_report=reliability_report,
+            deployment_health_report=deployment_health_report,
+        )
+        writer.write_json("completion-contract.json", completion)
+        _append_note(
+            notes_path,
+            "COMPLETION",
+            f"passed={completion['passed']} failed={len(completion['failed_checks'])}",
+        )
+        if not completion["passed"]:
+            failed = ", ".join(completion["failed_checks"])
+            raise RuntimeError(f"Completion contract failed: {failed}")
+
         transitions.append(RunState.DONE)
         store.append_transition(run_id, RunState.DONE.value)
         store.set_final_status(
@@ -225,11 +328,13 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
             RunState.DONE.value,
             recommendation_title=selected.candidate.title if selected else "",
         )
+        _append_note(notes_path, "RUN_DONE", f"recommendation={(selected.candidate.title if selected else '')}")
     except Exception as exc:
         writer.write_json("pipeline-error.json", {"error": redact_secrets(str(exc))})
         transitions.append(RunState.FAILED)
         store.append_transition(run_id, RunState.FAILED.value)
         store.set_final_status(run_id, RunState.FAILED.value)
+        _append_note(notes_path, "RUN_FAILED", redact_secrets(str(exc)))
 
     return transitions
 
@@ -238,7 +343,11 @@ def _default_build_spec(config: RunConfig, selected: ScoredCandidate | None) -> 
     selected_candidate = selected.candidate if selected is not None else None
     stack = [config.preferred_stack] if config.preferred_stack else None
     if not stack:
-        stack = selected_candidate.stack if selected_candidate and selected_candidate.stack else ["Next.js", "SQLite"]
+        stack = (
+            selected_candidate.stack
+            if selected_candidate and selected_candidate.stack
+            else ["Next.js", "SQLite"]
+        )
 
     title = selected_candidate.title if selected_candidate else config.problem_statement
 
@@ -259,10 +368,7 @@ def _default_build_spec(config: RunConfig, selected: ScoredCandidate | None) -> 
     )
 
 
-def _default_checkpoint_progress(
-    config: RunConfig,
-    spec: ProjectSpec,
-) -> Dict[int, int]:
+def _default_checkpoint_progress(config: RunConfig, spec: ProjectSpec) -> Dict[int, int]:
     if config.mode == "fast":
         return {25: 1, 50: 1, 75: 2}
     return {25: 1, 50: 2, 75: len(spec.milestones) - 1}
@@ -284,6 +390,232 @@ def _serialize_scored_candidate(item: ScoredCandidate) -> Dict[str, Any]:
             }
             for rec in item.track_fit
         ],
+    }
+
+
+def _runtime_health_policy(allow_local_health: bool) -> UrlPolicy:
+    return UrlPolicy(
+        allowed_schemes=("https", "http") if allow_local_health else ("https",),
+        allow_localhost=allow_local_health,
+    )
+
+
+def _select_candidate(
+    config: RunConfig,
+    ranked: list[ScoredCandidate],
+) -> tuple[ScoredCandidate, str, int]:
+    support = [item.candidate for item in ranked]
+
+    if config.selected_option is not None:
+        index = config.selected_option - 1
+        if index < 0 or index >= len(ranked):
+            raise ValueError(
+                f"selected_option={config.selected_option} is out of range for {len(ranked)} ranked options"
+            )
+        selected = ranked[index]
+        if not passes_minimum_evidence(selected.candidate, support):
+            raise ValueError("Explicitly selected candidate failed evidence gate")
+        return selected, "selected-option", index + 1
+
+    if config.interactive_selection:
+        options = [f"{item.candidate.title} (score={item.total_score:.3f})" for item in ranked]
+        index = prompt_for_selection(options)
+        selected = ranked[index]
+        if not passes_minimum_evidence(selected.candidate, support):
+            raise ValueError("Interactively selected candidate failed evidence gate")
+        return selected, "interactive", index + 1
+
+    selected = choose_recommendation(ranked)
+    index = ranked.index(selected)
+    return selected, "auto-evidence", index + 1
+
+
+def _generate_project_files(spec: ProjectSpec) -> tuple[str, dict[str, str]]:
+    joined = " ".join(spec.stack).lower()
+    if any(token in joined for token in ("python", "fastapi", "flask", "django", "api")):
+        generator = APIAppGenerator()
+        return "api", generator.generate(spec)
+
+    generator = WebAppGenerator()
+    return "web", generator.generate(spec)
+
+
+def _run_build_execution(project_root: Path) -> Dict[str, Any]:
+    if (project_root / "package.json").exists():
+        result = run_dependency_install(cwd=project_root, command=("npm", "install"), retries=1)
+        return {
+            "status": "executed",
+            "command": ["npm", "install"],
+            "returncode": result.returncode,
+            "timed_out": result.timed_out,
+            "stdout": redact_secrets(result.stdout),
+            "stderr": redact_secrets(result.stderr),
+        }
+
+    if (project_root / "requirements.txt").exists():
+        return {
+            "status": "skipped",
+            "reason": "python dependency install is not enabled by allowlist policy",
+        }
+
+    return {
+        "status": "skipped",
+        "reason": "no known build/install manifest found",
+    }
+
+
+def _execute_testing_fallback(
+    *,
+    config: RunConfig,
+    project_root: Path,
+    health_url: str | None,
+) -> Dict[str, Any]:
+    plan = select_test_plan(config.deadline_hours * 60)
+
+    def smoke_runner() -> CommandResult:
+        target = health_url
+        if not target and config.allow_local_health:
+            target = "http://localhost:3000/health"
+
+        if not target:
+            return CommandResult(
+                returncode=1,
+                stdout="",
+                stderr="smoke skipped: no health url configured",
+                timed_out=False,
+            )
+
+        ok = probe_dev_server(
+            target,
+            retries=3,
+            delay_seconds=1.0,
+            timeout_seconds=2.0,
+            policy=_runtime_health_policy(config.allow_local_health),
+        )
+        return CommandResult(
+            returncode=0 if ok else 1,
+            stdout=f"smoke target: {target}",
+            stderr="" if ok else f"smoke probe failed: {target}",
+            timed_out=False,
+        )
+
+    runners: Dict[str, Callable[[], CommandResult]] = {
+        "smoke": smoke_runner,
+    }
+
+    if (project_root / "package.json").exists():
+        if _has_playwright_config(project_root):
+            runners["e2e"] = lambda: run_playwright_e2e(project_root)
+        runners["integration"] = lambda: run_vitest_integration(project_root)
+    elif _looks_like_python_project(project_root):
+        runners["integration"] = lambda: run_pytest_integration(project_root)
+
+    fallback = run_tests_with_fallback(plan, runners)
+    result_payload: Dict[str, Any] = {
+        "executed_suite": fallback.executed_suite,
+        "planned_suites": plan,
+        "skipped_reasons": fallback.skipped_reasons,
+        "pass_rate": 1.0
+        if fallback.result is not None and fallback.result.returncode == 0 and not fallback.result.timed_out
+        else 0.0,
+    }
+
+    if fallback.result is not None:
+        result_payload["result"] = {
+            "returncode": fallback.result.returncode,
+            "stdout": redact_secrets(fallback.result.stdout),
+            "stderr": redact_secrets(fallback.result.stderr),
+            "timed_out": fallback.result.timed_out,
+        }
+
+    return result_payload
+
+
+def _has_playwright_config(project_root: Path) -> bool:
+    return any(
+        (project_root / candidate).exists()
+        for candidate in ("playwright.config.ts", "playwright.config.js", "playwright.config.mjs")
+    )
+
+
+def _looks_like_python_project(project_root: Path) -> bool:
+    if (project_root / "main.py").exists() or (project_root / "pytest.ini").exists():
+        return True
+    return any(project_root.glob("tests/test_*.py"))
+
+
+def _build_execution_passed(build_execution: Dict[str, Any] | None) -> bool:
+    if not build_execution:
+        return False
+
+    status = build_execution.get("status")
+    if status == "executed":
+        return (
+            int(build_execution.get("returncode", 1)) == 0
+            and not bool(build_execution.get("timed_out", False))
+        )
+
+    if status == "skipped":
+        reason = str(build_execution.get("reason", ""))
+        return reason in {
+            "python dependency install is not enabled by allowlist policy",
+            "no known build/install manifest found",
+        }
+
+    return False
+
+
+def _evaluate_completion_contract(
+    *,
+    artifacts_dir: Path,
+    selected: ScoredCandidate | None,
+    generated_files: list[str],
+    build_execution: Dict[str, Any] | None,
+    testing_report: Dict[str, Any] | None,
+    reliability_report: Dict[str, Any] | None,
+    deployment_health_report: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    required_artifacts = [
+        "intake-summary.json",
+        "research-summary.json",
+        "ranking-preview.json",
+        "selection.json",
+        "checkpoint-replan.json",
+        "build-generation.json",
+        "testing-report.json",
+        "demo-reliability.json",
+        "deployment-health.json",
+        "video-result.json",
+        "pitch-narrative.json",
+        "submission.md",
+        "judge-qa.md",
+    ]
+
+    executed_suite = str((testing_report or {}).get("executed_suite", "none"))
+    pass_rate = float((testing_report or {}).get("pass_rate", 0.0))
+
+    checks = {
+        "selection_present": selected is not None,
+        "project_generated": bool(generated_files),
+        "core_logic_generated": any(
+            candidate in generated_files
+            for candidate in ("src/core-logic.js", "main.py")
+        ),
+        "build_execution_ok": _build_execution_passed(build_execution),
+        "tests_passed": executed_suite != "none" and pass_rate >= 1.0,
+        "demo_reliability_stable": bool((reliability_report or {}).get("stable", False)),
+        "deployment_health_stable": bool((deployment_health_report or {}).get("stable", False)),
+        "required_artifacts_present": all((artifacts_dir / name).exists() for name in required_artifacts),
+    }
+
+    failed_checks = [name for name, passed in checks.items() if not passed]
+    return {
+        "passed": not failed_checks,
+        "checks": checks,
+        "failed_checks": failed_checks,
+        "executed_suite": executed_suite,
+        "pass_rate": pass_rate,
+        "generated_files": generated_files,
     }
 
 
@@ -322,35 +654,28 @@ def _serialize_checkpoint_decision(decision: CheckpointDecision) -> Dict[str, An
     }
 
 
-def _auto_generate_video(config: RunConfig, writer: SafeArtifactWriter) -> None:
+def _auto_generate_video(config: RunConfig, writer: SafeArtifactWriter, run_root: Path) -> None:
     scenes = _build_storyboard(config)
     config_json = compose_remotion_config(scenes)
     config_path = writer.write_text("remotion.config.json", config_json)
+    video_workspace = run_root.resolve() / "video"
+    entry_path = ensure_remotion_bundle(video_workspace)
 
     command = build_remotion_render_command(
+        entry=entry_path,
         output=writer.root / "demo.mp4",
         props_file=config_path,
     )
     render_result = execute_render_with_fallback(
         command,
         config_json=config_json,
-        cwd=Path.cwd(),
+        cwd=video_workspace,
     )
     writer.write_json("video-result.json", _serialize_render_result(render_result))
 
 
-def _build_testing_report(deadline_hours: int) -> Dict[str, Any]:
-    total_minutes = deadline_hours * 60
-    if total_minutes >= 180:
-        suites = ["e2e", "integration", "smoke"]
-    elif total_minutes >= 90:
-        suites = ["integration", "smoke"]
-    else:
-        suites = ["smoke"]
-
-    return {
-        "executed_suite": suites[0],
-        "planned_suites": suites,
-        "pass_rate": 1.0,
-        "skipped_reasons": {},
-    }
+def _append_note(path: Path, event: str, detail: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(UTC).isoformat()
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(f"[{timestamp}] {event}: {detail}\n")

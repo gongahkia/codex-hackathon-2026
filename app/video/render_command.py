@@ -7,7 +7,7 @@ from pathlib import Path
 
 def build_remotion_render_command(
     *,
-    entry: str = "remotion/index.ts",
+    entry: str | Path = "remotion/index.ts",
     composition: str = "Main",
     output: str | Path = "artifacts/demo.mp4",
     props_file: str | Path = "artifacts/remotion.config.json",
@@ -15,10 +15,14 @@ def build_remotion_render_command(
     """Build deterministic CLI command for Remotion MP4 render."""
 
     return [
-        "npx",
+        "npm",
+        "exec",
+        "--yes",
+        "--package=@remotion/cli@4.0.429",
+        "--",
         "remotion",
         "render",
-        entry,
+        str(entry),
         composition,
         str(output),
         "--props",

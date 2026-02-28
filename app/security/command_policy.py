@@ -12,7 +12,7 @@ ALLOWED_PREFIXES = {
     ("pytest",),
     ("python3", "-m", "unittest"),
     ("npx", "playwright", "test"),
-    ("npx", "remotion", "render"),
+    ("npm", "exec", "--yes", "--package=@remotion/cli@4.0.429", "--", "remotion", "render"),
     ("vercel", "deploy"),
     ("render", "deploy"),
 }
