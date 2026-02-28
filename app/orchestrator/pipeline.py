@@ -481,7 +481,31 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                     )
 
                 if state == RunState.VIDEO:
-                    video_result = _auto_generate_video(config, writer, run_root)
+                    if _should_skip_video_render_for_budget(
+                        total_budget_minutes=total_budget_minutes,
+                        collected_timings=phase_timings.as_dict(),
+                    ):
+                        scenes = _build_storyboard(config)
+                        config_json = compose_remotion_config(scenes)
+                        writer.write_text("remotion.config.json", config_json)
+                        video_result = {
+                            "rendered": False,
+                            "fallback": True,
+                            "reason": "video render skipped due low remaining budget",
+                            "remaining_budget_minutes": _remaining_budget_minutes(
+                                total_budget_minutes,
+                                phase_timings.as_dict(),
+                            ),
+                            "config": config_json,
+                        }
+                        writer.write_json("video-result.json", video_result)
+                        _append_note(
+                            notes_path,
+                            "BUDGET_SKIP",
+                            "state=VIDEO skipped heavy render due low remaining budget",
+                        )
+                    else:
+                        video_result = _auto_generate_video(config, writer, run_root)
                     if spec is None:
                         spec = _default_build_spec(config, selected)
 
@@ -1130,6 +1154,20 @@ def _should_skip_state_for_budget(
     consumed_minutes = sum(max(0.0, value) for value in collected_timings.values()) / 60.0
     remaining_minutes = max(0.0, float(total_budget_minutes) - consumed_minutes)
     return remaining_minutes <= 0 or state_budget == 0
+
+
+def _remaining_budget_minutes(total_budget_minutes: int, collected_timings: Dict[str, float]) -> float:
+    consumed_minutes = sum(max(0.0, value) for value in collected_timings.values()) / 60.0
+    return max(0.0, float(total_budget_minutes) - consumed_minutes)
+
+
+def _should_skip_video_render_for_budget(
+    *,
+    total_budget_minutes: int,
+    collected_timings: Dict[str, float],
+    threshold_minutes: float = 2.0,
+) -> bool:
+    return _remaining_budget_minutes(total_budget_minutes, collected_timings) < threshold_minutes
 
 
 def _load_resume_context(path: Path) -> Dict[str, Any]:

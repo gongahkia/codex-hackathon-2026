@@ -403,6 +403,36 @@ def test_pipeline_skips_low_priority_states_when_budget_is_exhausted(
     assert "BUDGET_SKIP: state=VIDEO skipped because budget is exhausted" in notes
 
 
+def test_pipeline_skips_heavy_video_render_when_remaining_budget_is_low(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline._should_skip_video_render_for_budget",
+        lambda **kwargs: True,
+    )
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.execute_render_with_fallback",
+        lambda command, *, config_json, cwd, timeout_seconds=600: {
+            "rendered": True,
+            "fallback": False,
+            "command": " ".join(command),
+            "config": config_json,
+        },
+    )
+
+    config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
+    transitions = run_pipeline(config)
+    assert transitions[-1] == RunState.DONE
+
+    run_dirs = list((tmp_path / "runs").glob("*"))
+    assert run_dirs
+    video_result = json.loads((run_dirs[0] / "artifacts" / "video-result.json").read_text(encoding="utf-8"))
+    assert video_result["fallback"] is True
+    assert video_result["rendered"] is False
+    assert "low remaining budget" in video_result["reason"]
+
+
 def test_pipeline_verifies_candidate_links_before_ranking(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
