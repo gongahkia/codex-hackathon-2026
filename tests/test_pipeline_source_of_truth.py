@@ -130,6 +130,53 @@ def test_pipeline_auto_falls_back_to_top_candidate_when_evidence_gate_fails(
     assert selection["recommendation_fallback_used"] is True
 
 
+def test_selection_json_marks_evidence_gate_false_for_fallback_recommendation(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.execute_render_with_fallback",
+        lambda command, *, config_json, cwd, timeout_seconds=600: {
+            "rendered": False,
+            "fallback": True,
+            "reason": "no-remotion",
+            "command": " ".join(command),
+            "config": config_json,
+        },
+    )
+
+    class _Source:
+        source_name = "single"
+
+        def search(self, problem: str, limit: int):
+            _ = (problem, limit)
+            return [
+                {
+                    "title": "Code-only idea",
+                    "summary": "Only code URL present",
+                    "urls": ["https://github.com/acme/code-only"],
+                    "stack": ["Next.js"],
+                    "signals": {"complexity": "low", "setup_steps": 2},
+                    "source": "single",
+                }
+            ]
+
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.build_source_registry",
+        lambda include_reddit=False, policy=None: {"single": _Source()},
+    )
+
+    config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
+    transitions = run_pipeline(config)
+    assert transitions[-1] == RunState.DONE
+
+    run_dirs = list((tmp_path / "runs").glob("*"))
+    assert run_dirs
+    selection = json.loads((run_dirs[0] / "artifacts" / "selection.json").read_text(encoding="utf-8"))
+    assert selection["selection_mode"] == "auto-fallback"
+    assert selection["evidence_gate_passed"] is False
+
+
 def test_pipeline_creates_deterministic_candidate_when_research_is_empty(
     monkeypatch, tmp_path: Path
 ) -> None:
