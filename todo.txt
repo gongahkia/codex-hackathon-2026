@@ -1,4 +1,3 @@
-(A) Implement recommendation chooser selecting highest valid score above evidence gate in `app/services/recommendation.py` +scoring +ranking
 (A) Implement fallback recommendation path when all candidates fail evidence gate in `app/services/recommendation.py` +scoring +ranking
 (A) Implement short recommendation summary renderer in `app/output/summary.py` +output +ranking
 (A) Implement detailed matrix renderer with per-factor scores and source links in `app/output/matrix.py` +output +ranking

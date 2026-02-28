@@ -1,0 +1,19 @@
+"""Recommendation selection services."""
+
+from __future__ import annotations
+
+from app.models.candidate import Candidate
+from app.services.evidence_gate import passes_minimum_evidence
+from app.services.ranking import ScoredCandidate
+
+
+def choose_recommendation(ranked_candidates: list[ScoredCandidate]) -> ScoredCandidate:
+    """Select highest-scored candidate that passes evidence requirements."""
+
+    support: list[Candidate] = [item.candidate for item in ranked_candidates]
+    for item in ranked_candidates:
+        if item.total_score <= 0:
+            continue
+        if passes_minimum_evidence(item.candidate, support):
+            return item
+    raise ValueError("No candidate passed evidence gate")
