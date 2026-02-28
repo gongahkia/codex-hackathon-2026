@@ -485,12 +485,20 @@ def _default_checkpoint_progress(config: RunConfig, spec: ProjectSpec) -> Dict[i
 
 
 def _serialize_scored_candidate(item: ScoredCandidate) -> Dict[str, Any]:
+    verified_code_links = item.candidate.signals.get("verified_code_links", [])
+    verified_writeup_links = item.candidate.signals.get("verified_writeup_links", [])
+    verification_errors = item.candidate.signals.get("verification_errors", [])
     return {
         "title": item.candidate.title,
         "source": item.candidate.source,
         "total_score": item.total_score,
         "factors": dict(item.factors),
         "applied_weights": dict(item.applied_weights),
+        "verified_code_links": list(verified_code_links) if isinstance(verified_code_links, list) else [],
+        "verified_writeup_links": (
+            list(verified_writeup_links) if isinstance(verified_writeup_links, list) else []
+        ),
+        "verification_errors": list(verification_errors) if isinstance(verification_errors, list) else [],
         "track_fit": [
             {
                 "track": rec.track,

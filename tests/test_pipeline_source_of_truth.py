@@ -132,6 +132,16 @@ def test_pipeline_creates_deterministic_candidate_when_research_is_empty(
 
     run_dirs = list((tmp_path / "runs").glob("*"))
     assert run_dirs
+    ranking = json.loads(
+        (run_dirs[0] / "artifacts" / "ranking-preview.json").read_text(encoding="utf-8")
+    )
+    top = ranking["ranked_candidates"][0]
+    assert "verified_code_links" in top
+    assert "verified_writeup_links" in top
+    assert "verification_errors" in top
+
+    run_dirs = list((tmp_path / "runs").glob("*"))
+    assert run_dirs
     artifacts = run_dirs[0] / "artifacts"
     research = json.loads((artifacts / "research-summary.json").read_text(encoding="utf-8"))
     selection = json.loads((artifacts / "selection.json").read_text(encoding="utf-8"))
