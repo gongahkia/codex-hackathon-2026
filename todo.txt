@@ -1,0 +1,46 @@
+(B) Add `pause_for_feedback: bool = False` to `app/models/run_config.py` and thread it through CLI parsing and pipeline state handling. +feature +orchestrator +models
+(B) Add CLI flags `--pause-for-feedback` and `--feedback-checkpoints` in `app/cli.py` and map them into `RunConfig` without changing default one-shot behavior. +feature +cli
+(B) Replace the mandatory selection pause in `app/orchestrator/pipeline.py` with auto-selection unless `pause_for_feedback` is true. +feature +orchestrator
+(B) Switch selection logic to `choose_recommendation_with_fallback` and persist whether fallback was used in `selection.json`. +refactor +orchestrator +ranking
+(B) Stop hard-failing when research returns zero candidates by creating a deterministic fallback candidate derived from `problem_statement` and tagging its provenance. +stability +orchestrator +sources
+(B) Stop hard-failing when ranking is empty by injecting a single fallback ranked option with explicit warning metadata. +stability +orchestrator +ranking
+(B) Add `strict_fail_fast: bool = False` to `RunConfig` and apply it as the only switch that allows mid-run hard stops. +feature +models +orchestrator
+(B) Change completion-contract failure in `app/orchestrator/pipeline.py` from exception to warning when `strict_fail_fast` is false. +stability +orchestrator
+(B) Change deployment health enforcement to record instability warnings and continue when `strict_fail_fast` is false. +stability +runtime +orchestrator
+(B) Add per-phase warning capture in pipeline state execution so recoverable errors produce artifacts and execution continues. +stability +orchestrator
+(B) Write a new `run-outcome.json` artifact that reports `done`, `warnings`, `recoveries`, and `fatal_errors` for every run. +utility +output +orchestrator
+(B) Update `SKILL.md` to make one-shot execution the default and only enable pause checkpoints when the user explicitly requests guardrails in the initial prompt. +feature +skill
+(B) Update `skills/last-minute/SKILL.md` to match one-shot default behavior and optional guardrail-triggered pauses. +feature +skill
+(B) Replace synthetic Devpost generation in `app/sources/devpost.py` with live fetch and parsing of real Devpost results under `UrlPolicy`. +feature +sources +evidence
+(B) Replace synthetic DoraHacks generation in `app/sources/dorahacks.py` with live fetch and parsing of real DoraHacks results under `UrlPolicy`. +feature +sources +evidence
+(B) Add URL verification in a new evidence-verification service that probes candidate links and records reachable code/writeup evidence before ranking. +security +evidence +sources
+(B) Drop or down-rank candidates with unreachable evidence URLs and keep the reason in structured metadata. +quality +ranking +evidence
+(B) Persist per-candidate verification fields (`verified_code_links`, `verified_writeup_links`, `verification_errors`) in `ranking-preview.json`. +utility +output +evidence
+(B) Add response caching for source fetches under run-local cache storage to reduce repeated network latency on retries. +performance +storage +sources
+(B) Execute source adapter searches in parallel with bounded workers and per-source timeout guards. +performance +sources +resilience
+(B) Integrate `retry_with_jitter` and `CircuitBreaker` around each source adapter invocation in research phase. +stability +resilience +sources
+(B) Enrich GitHub candidates with repository freshness metadata and apply `is_repo_stale` penalty in ranking factors. +quality +ranking +sources
+(B) Apply `is_low_detail_description` as a ranking penalty factor and include the penalty in factor breakdown output. +quality +ranking
+(B) Add deterministic tie-break sorting using `track_fit` score and evidence quality when weighted totals are equal. +quality +ranking
+(B) Extend `app/models/candidate.py` with provenance fields (`fetched_at`, `verified_at`, `source_query`, `verification_errors`) and validate their shape. +refactor +models +sources
+(B) Integrate `PhaseTimingCollector` in `app/orchestrator/pipeline.py` and write `phase-timings.json` per run. +utility +telemetry +orchestrator
+(B) Emit structured progress events for every state transition and append them to `codex-notes.log` in JSON lines format. +utility +telemetry +orchestrator
+(B) Add `warning_count`, `fatal_count`, and `last_error_code` columns to `runs` table with backward-compatible migration in `RunStore`. +infra +storage +observability
+(B) Persist sanitized command execution breadcrumbs (`command`, `cwd`, `duration_ms`, `returncode`) to `command-history.json`. +utility +runtime +observability
+(B) Add `.github/workflows/ci.yml` to run `pytest -q` and one CLI smoke command on macOS and Ubuntu. +infra +ci
+(B) Add a regression test that asserts a default run never prompts for interactive selection or checkpoint input. +testing +orchestrator
+(B) Add a regression test that asserts non-strict mode returns `DONE` with warnings when deployment watch is unstable. +testing +runtime +orchestrator
+(B) Add a regression test that asserts `pause_for_feedback=true` triggers checkpoint prompts and blocks until user input. +testing +orchestrator
+(B) Add a regression test that asserts live adapters never emit synthetic placeholder URLs like `github.com/example/*`. +testing +sources
+(B) Add a regression test that asserts `selection.json` records `evidence_gate_passed=false` when fallback recommendation is used. +testing +ranking +orchestrator
+(B) Add a regression test that asserts completion-contract failures are warnings in non-strict mode and fatal in strict mode. +testing +orchestrator
+(B) Add run resume support that restarts from the next unfinished state using existing artifacts and `runs.db` transitions. +stability +orchestrator +storage
+(B) Add per-phase exception boundaries that emit `phase-error-<state>.json` and continue with fallback state inputs when possible. +stability +orchestrator +output
+(B) Enforce per-phase time budgets derived from `deadline_hours` and skip low-priority work when remaining time is exhausted. +performance +orchestrator +deadline
+(B) Integrate `time_budget_splitter` and `BudgetSnapshot` into run context and persist `time-budget.json` as a first-class artifact. +refactor +orchestrator +models
+(B) Skip heavy video render execution when remaining time budget is below threshold and emit fallback-only video result. +performance +video +deadline
+(B) Add macOS preflight checks for `node`, `npm`, `python3`, and `npx` before build/test/video phases and emit actionable warnings. +stability +runtime +macos
+(B) Use `npm ci` instead of `npm install` when a lockfile exists in generated project output. +performance +runtime +build
+(B) Add a Python integration-test fallback runner that executes `python3 -m pytest` when `pytest` binary is unavailable in PATH. +stability +testing +runtime
+(B) Harden `run_command_streamed` timeout handling to set explicit timeout exit metadata and preserve partial buffered output. +stability +runtime +security
+(B) Add retention controls that prune old `runs/<id>` directories and stale `runs.db` rows beyond a configurable limit. +scaling +storage +maintenance
