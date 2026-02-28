@@ -22,6 +22,11 @@ def test_devpost_adapter_parses_live_results_html() -> None:
     assert rows[1]["title"] == "Beta Tool"
     assert rows[1]["urls"] == ["https://devpost.com/software/beta-tool"]
     assert rows[0]["signals"]["live_fetch"] is True
+    assert all(
+        "github.com/example/" not in url
+        for row in rows
+        for url in row["urls"]
+    )
 
 
 def test_devpost_adapter_returns_empty_on_fetch_failure() -> None:
