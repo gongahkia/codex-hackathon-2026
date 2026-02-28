@@ -81,8 +81,11 @@ def test_pipeline_warns_on_flaky_deployment_watch_in_non_strict_mode(
     run_dirs = list((tmp_path / "runs").glob("*"))
     assert run_dirs
     payload = json.loads((run_dirs[0] / "artifacts" / "deployment-health.json").read_text(encoding="utf-8"))
+    outcome = json.loads((run_dirs[0] / "artifacts" / "run-outcome.json").read_text(encoding="utf-8"))
     assert "warning" in payload
     assert payload["stable"] is False
+    assert outcome["done"] is True
+    assert outcome["warnings"]
 
 
 def test_pipeline_fails_fast_on_flaky_deployment_watch_in_strict_mode(
