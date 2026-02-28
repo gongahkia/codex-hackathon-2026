@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from html import unescape
 from typing import Callable, List
 from urllib.parse import quote_plus, urlparse
-from urllib.request import Request, urlopen
+
+from app.security.url_policy import UrlPolicy, fetch_text
 
 TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 META_DESC_RE = re.compile(
@@ -34,9 +35,12 @@ class HackathonIntake:
 
 
 def _default_fetch_html(url: str) -> str:
-    request = Request(url, headers={"User-Agent": "last-minute/0.1"})
-    with urlopen(request, timeout=10) as response:
-        return response.read().decode("utf-8", errors="ignore")
+    return fetch_text(
+        url,
+        policy=UrlPolicy(),
+        expected_content_types=("text/html", "text/plain"),
+        user_agent="last-minute/0.2",
+    )
 
 
 def _strip_tags(value: str) -> str:
@@ -100,11 +104,20 @@ def preprocess_hackathon_input(
     problem_statement: str | None,
     hackathon_url: str | None,
     similar_limit: int = 5,
+    policy: UrlPolicy | None = None,
     fetch_html: FetchHtml | None = None,
 ) -> HackathonIntake:
     """Resolve intake using problem text or a Luma/Devpost hackathon link."""
 
-    fetch = fetch_html or _default_fetch_html
+    effective_policy = policy or UrlPolicy()
+    fetch = fetch_html or (
+        lambda url: fetch_text(
+            url,
+            policy=effective_policy,
+            expected_content_types=("text/html", "text/plain"),
+            user_agent="last-minute/0.2",
+        )
+    )
     cleaned_problem = (problem_statement or "").strip()
 
     if hackathon_url is None or hackathon_url.strip() == "":

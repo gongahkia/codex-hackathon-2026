@@ -23,7 +23,10 @@ class DoraHacksAdapter(SourceAdapter):
                 {
                     "title": f"{normalized_problem} accelerator #{index + 1}",
                     "summary": "Inspired by DoraHacks submissions with practical MVP scope.",
-                    "urls": [f"https://dorahacks.io/project/{normalized_problem.replace(' ', '-').lower()}-{index + 1}"],
+                    "urls": [
+                        f"https://dorahacks.io/project/{normalized_problem.replace(' ', '-').lower()}-{index + 1}",
+                        f"https://github.com/example/{normalized_problem.replace(' ', '-').lower()}-dh-{index + 1}",
+                    ],
                     "stack": [],
                     "signals": {"hackathon_ready": True},
                     "source": self.source_name,

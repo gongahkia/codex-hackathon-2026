@@ -24,7 +24,10 @@ class DevpostAdapter(SourceAdapter):
                 {
                     "title": f"{normalized_problem} project pattern #{index + 1}",
                     "summary": "Derived from Devpost challenge submissions and judging trends.",
-                    "urls": [f"https://devpost.com/software/{slug}-{index + 1}"],
+                    "urls": [
+                        f"https://devpost.com/software/{slug}-{index + 1}",
+                        f"https://github.com/example/{slug}-{index + 1}",
+                    ],
                     "stack": [],
                     "signals": {"battle_tested": True},
                     "source": self.source_name,

@@ -2,19 +2,6 @@
 
 from __future__ import annotations
 
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from app.security.url_policy import canonicalize_url
 
-
-def canonicalize_url(url: str) -> str:
-    """Normalize query parameter ordering and trailing slashes."""
-
-    parsed = urlparse(url.strip())
-    query_items = sorted(parse_qsl(parsed.query, keep_blank_values=False))
-    query = urlencode(query_items, doseq=True)
-
-    normalized_path = parsed.path.rstrip("/")
-    if not normalized_path and parsed.scheme and parsed.netloc:
-        normalized_path = ""
-
-    canonical = parsed._replace(path=normalized_path, query=query, fragment="")
-    return urlunparse(canonical)
+__all__ = ["canonicalize_url"]

@@ -6,7 +6,8 @@ import re
 from dataclasses import dataclass, field
 from html import unescape
 from typing import Callable, List, Sequence
-from urllib.request import Request, urlopen
+
+from app.security.url_policy import UrlPolicy, fetch_text
 
 FetchHtml = Callable[[str], str]
 
@@ -30,9 +31,12 @@ class JudgingContext:
 
 
 def _default_fetch_html(url: str) -> str:
-    request = Request(url, headers={"User-Agent": "last-minute/0.1"})
-    with urlopen(request, timeout=10) as response:
-        return response.read().decode("utf-8", errors="ignore")
+    return fetch_text(
+        url,
+        policy=UrlPolicy(),
+        expected_content_types=("text/html", "text/plain"),
+        user_agent="last-minute/0.2",
+    )
 
 
 def _clean(value: str) -> str:
@@ -93,6 +97,7 @@ def ingest_judging_context(
     hackathon_url: str | None,
     rubric_text: str | None = None,
     provided_prize_tracks: Sequence[str] | None = None,
+    policy: UrlPolicy | None = None,
     fetch_html: FetchHtml | None = None,
 ) -> JudgingContext:
     """Build judging context from explicit input and optional hackathon page ingestion.
@@ -109,7 +114,15 @@ def ingest_judging_context(
     if not hackathon_url:
         return context
 
-    fetch = fetch_html or _default_fetch_html
+    effective_policy = policy or UrlPolicy()
+    fetch = fetch_html or (
+        lambda url: fetch_text(
+            url,
+            policy=effective_policy,
+            expected_content_types=("text/html", "text/plain"),
+            user_agent="last-minute/0.2",
+        )
+    )
     try:
         html = fetch(hackathon_url)
     except Exception as exc:

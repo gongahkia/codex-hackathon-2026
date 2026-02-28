@@ -13,6 +13,8 @@ class RunStore:
 
     def __init__(self, db_path: str | Path = "runs.db") -> None:
         self.db_path = str(db_path)
+        db_parent = Path(self.db_path).expanduser().resolve().parent
+        db_parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
@@ -27,6 +29,7 @@ class RunStore:
                     config_json TEXT NOT NULL,
                     transitions_json TEXT NOT NULL,
                     final_status TEXT,
+                    recommendation_title TEXT,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
                 """
@@ -36,8 +39,8 @@ class RunStore:
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO runs (run_id, config_json, transitions_json, final_status)
-                VALUES (?, ?, ?, NULL)
+                INSERT INTO runs (run_id, config_json, transitions_json, final_status, recommendation_title)
+                VALUES (?, ?, ?, NULL, NULL)
                 ON CONFLICT(run_id) DO UPDATE SET config_json=excluded.config_json
                 """,
                 (run_id, json.dumps(config), json.dumps([])),
@@ -58,17 +61,25 @@ class RunStore:
                 (json.dumps(transitions), run_id),
             )
 
-    def set_final_status(self, run_id: str, status: str) -> None:
+    def set_final_status(self, run_id: str, status: str, recommendation_title: str = "") -> None:
         with self._connect() as conn:
             conn.execute(
-                "UPDATE runs SET final_status = ?, updated_at = CURRENT_TIMESTAMP WHERE run_id = ?",
-                (status, run_id),
+                """
+                UPDATE runs
+                SET final_status = ?, recommendation_title = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE run_id = ?
+                """,
+                (status, recommendation_title, run_id),
             )
 
     def get_run(self, run_id: str) -> Dict[str, Any] | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT config_json, transitions_json, final_status FROM runs WHERE run_id = ?",
+                """
+                SELECT config_json, transitions_json, final_status, recommendation_title
+                FROM runs
+                WHERE run_id = ?
+                """,
                 (run_id,),
             ).fetchone()
             if not row:
@@ -77,4 +88,5 @@ class RunStore:
                 "config": json.loads(row[0]),
                 "transitions": json.loads(row[1]),
                 "final_status": row[2],
+                "recommendation_title": row[3],
             }

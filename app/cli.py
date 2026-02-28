@@ -12,6 +12,7 @@ from app.models.run_config import DEFAULT_WEIGHTS, RunConfig
 from app.models.run_state import RunState
 from app.models.scoring import Weights
 from app.orchestrator.pipeline import run_pipeline
+from app.security.url_policy import UrlPolicy
 from app.services.mode import parse_mode
 from app.services.source_policy import validate_reddit_opt_in
 
@@ -63,9 +64,11 @@ def run_command(
         raise typer.Exit(code=2) from exc
 
     try:
+        policy = UrlPolicy()
         intake = preprocess_hackathon_input(
             problem_statement=problem_statement,
             hackathon_url=hackathon_url,
+            policy=policy,
         )
     except ValueError as exc:
         typer.echo(str(exc), err=True)
@@ -79,6 +82,7 @@ def run_command(
         hackathon_url=intake.source_url,
         rubric_text=judging_rubric,
         provided_prize_tracks=provided_tracks,
+        policy=policy,
     )
 
     normalized_weights = Weights(

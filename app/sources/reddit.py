@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any, Dict, List
 from urllib.parse import quote_plus
-from urllib.request import Request, urlopen
 
+from app.security.url_policy import UrlPolicy, fetch_json
 from app.sources.base import SourceAdapter
 
 
@@ -15,8 +14,9 @@ class RedditAdapter(SourceAdapter):
 
     source_name = "reddit"
 
-    def __init__(self, include_reddit: bool = False) -> None:
+    def __init__(self, include_reddit: bool = False, policy: UrlPolicy | None = None) -> None:
         self.include_reddit = include_reddit
+        self._policy = policy or UrlPolicy()
 
     def search(self, problem: str, limit: int) -> List[Dict[str, Any]]:
         if not self.include_reddit:
@@ -27,11 +27,14 @@ class RedditAdapter(SourceAdapter):
             return []
 
         url = f"https://www.reddit.com/search.json?q={quote_plus(normalized_problem)}&limit={min(limit, 100)}"
-        request = Request(url, headers={"User-Agent": "last-minute/0.1"})
 
         try:
-            with urlopen(request, timeout=10) as response:
-                payload = json.loads(response.read().decode("utf-8"))
+            payload = fetch_json(
+                url,
+                policy=self._policy,
+                expected_content_types=("application/json", "text/json"),
+                user_agent="last-minute/0.2",
+            )
         except Exception:
             return []
 

@@ -10,6 +10,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
+from app.security.command_policy import enforce_allowed_command
+from app.security.redaction import redact_secrets
+
 
 @dataclass
 class CommandResult:
@@ -30,6 +33,8 @@ def run_command_streamed(
     on_output: Callable[[str], None] | None = None,
 ) -> CommandResult:
     """Run command with timeout and stream stdout/stderr lines."""
+
+    enforce_allowed_command(command)
 
     process = subprocess.Popen(
         list(command),
@@ -63,7 +68,7 @@ def run_command_streamed(
             if not line:
                 selector.unregister(key.fileobj)
                 continue
-            stripped = line.rstrip("\n")
+            stripped = redact_secrets(line.rstrip("\n"))
             if key.data == "stdout":
                 stdout_lines.append(stripped)
             else:

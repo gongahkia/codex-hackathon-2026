@@ -8,9 +8,13 @@ ALLOWED_PREFIXES = {
     ("npm", "install"),
     ("npm", "run", "dev"),
     ("npm", "run", "test"),
+    ("npm", "run", "test:integration"),
     ("pytest",),
+    ("python3", "-m", "unittest"),
     ("npx", "playwright", "test"),
     ("npx", "remotion", "render"),
+    ("vercel", "deploy"),
+    ("render", "deploy"),
 }
 
 

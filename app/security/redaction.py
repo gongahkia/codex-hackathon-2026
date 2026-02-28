@@ -8,6 +8,7 @@ SECRET_PATTERNS = [
     re.compile(r"(api[_-]?key\s*[=:]\s*)([^\s,;]+)", re.IGNORECASE),
     re.compile(r"(token\s*[=:]\s*)([^\s,;]+)", re.IGNORECASE),
     re.compile(r"(secret\s*[=:]\s*)([^\s,;]+)", re.IGNORECASE),
+    re.compile(r"(authorization\s*:\s*bearer\s+)([^\s,;]+)", re.IGNORECASE),
 ]
 
 

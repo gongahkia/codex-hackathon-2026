@@ -1,0 +1,8 @@
+# Lockfile strategy:
+# 1) Keep exact pins synchronized with pyproject.toml.
+# 2) Run CI + pip-audit on every dependency update.
+
+pydantic==2.9.2
+typer==0.12.5
+pytest==8.3.3
+pip-audit==2.8.0

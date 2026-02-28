@@ -8,6 +8,8 @@ from typing import Any, Dict, List
 from urllib.error import URLError
 from urllib.request import urlopen
 
+from app.security.url_policy import UrlPolicy, validate_safe_url
+
 
 @dataclass
 class DeploymentHealthReport:
@@ -31,6 +33,7 @@ def watch_deployment_health(
     interval_seconds: float = 1.0,
     timeout_seconds: float = 2.0,
     min_success_ratio: float = 0.8,
+    policy: UrlPolicy | None = None,
 ) -> DeploymentHealthReport:
     """Probe deployed endpoint and compute short-window stability."""
 
@@ -43,6 +46,9 @@ def watch_deployment_health(
             stable=True,
             errors=["Deployment watch skipped because no URL was supplied"],
         )
+
+    effective_policy = policy or UrlPolicy()
+    validate_safe_url(url, effective_policy)
 
     success_count = 0
     errors: List[str] = []
@@ -72,10 +78,14 @@ def watch_deployment_health(
     )
 
 
-def enforce_deployment_health(url: str | None) -> DeploymentHealthReport:
+def enforce_deployment_health(
+    url: str | None,
+    *,
+    policy: UrlPolicy | None = None,
+) -> DeploymentHealthReport:
     """Run deployment watch and fail fast when deployment is flaky."""
 
-    report = watch_deployment_health(url)
+    report = watch_deployment_health(url, policy=policy)
     if url and not report.stable:
         raise RuntimeError(
             f"Deployment health unstable for {url}: success_ratio={report.success_ratio:.2f}"

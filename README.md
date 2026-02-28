@@ -1,5 +1,7 @@
 # `LastMinute`
 
+This repository is now the canonical source of truth for `last-minute`.
+
 `LastMinute` is a Codex skill for solo hackathon builders. It supports:
 
 1. intake from either a raw problem statement or a `Devpost`/`Luma` hackathon link,
@@ -72,12 +74,24 @@ runs/<run_id>/artifacts/
 Common outputs:
 
 1. `intake-summary.json`
-2. `ranking-preview.json`
-3. `checkpoint-replan.json`
-4. `submission.md`
-5. `pitch-narrative.json` (`60/90/120` sec scripts)
-6. `judge-qa.md`
-7. `demo-reliability.json`
-8. `deployment-health.json` (if URL provided)
-9. `remotion.config.json`
-10. `video-result.json`
+2. `research-summary.json`
+3. `ranking-preview.json`
+4. `selection.json`
+5. `checkpoint-replan.json`
+6. `submission.md`
+7. `pitch-narrative.json` (`60/90/120` sec scripts)
+8. `judge-qa.md`
+9. `demo-reliability.json`
+10. `deployment-health.json` (if URL provided)
+11. `testing-report.json`
+12. `remotion.config.json`
+13. `video-result.json`
+
+## Security Hardening (Enforced)
+
+1. command allowlist is enforced before subprocess execution,
+2. secret redaction is applied to command output serialization,
+3. remote URL fetches are restricted to HTTPS and public IP destinations,
+4. redirects across domain boundaries are blocked by default,
+5. response content-type and byte limits are enforced on remote fetches,
+6. artifact writes are constrained to resolved run-local roots (path traversal blocked).
