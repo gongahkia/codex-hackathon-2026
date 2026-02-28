@@ -1,4 +1,3 @@
-(A) Implement `time_budget_splitter` that reserves implementation and testing time before research in `app/services/time_budget.py` +core +budget
 (A) Implement `BudgetSnapshot` model with per-phase minute allocations in `app/models/time_budget.py` +core +budget +model
 (A) Implement deadline overrun guard that aborts low-priority phases when `remaining_minutes <= 0` in `app/services/deadline_guard.py` +core +budget
 (A) Implement run state machine enum in `app/models/run_state.py` with `INTAKE`, `RESEARCH`, `RANKING`, `SELECTION`, `BUILD`, `TEST`, `VIDEO`, `DONE`, `FAILED` +core +model
