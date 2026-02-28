@@ -16,6 +16,11 @@ from app.services.source_policy import validate_reddit_opt_in
 app = typer.Typer(name="last-minute")
 
 
+@app.callback()
+def main() -> None:
+    """last-minute CLI root command group."""
+
+
 @app.command("run")
 def run_command(
     problem_statement: Optional[str] = typer.Option(None, "--problem-statement", "-p"),

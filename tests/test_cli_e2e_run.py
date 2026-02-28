@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from typer.testing import CliRunner
 
 from app.cli import app
@@ -38,4 +40,5 @@ def test_cli_e2e_run_with_fixture_pipeline(monkeypatch) -> None:
     )
 
     assert result.exit_code == 0
-    assert '"problem_statement":"Build AI todo app"' in result.output.replace(" ", "")
+    payload = json.loads(result.output)
+    assert payload["problem_statement"] == "Build AI todo app"
