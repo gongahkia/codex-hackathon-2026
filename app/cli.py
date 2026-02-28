@@ -7,7 +7,10 @@ from typing import Optional
 import typer
 
 from app.models.run_config import DEFAULT_WEIGHTS, RunConfig
+from app.models.run_state import RunState
 from app.models.scoring import Weights
+from app.orchestrator.pipeline import run_pipeline
+from app.services.mode import parse_mode
 
 app = typer.Typer(name="last-minute")
 
@@ -44,7 +47,7 @@ def run_command(
     config = RunConfig(
         problem_statement=problem_statement,
         deadline_hours=deadline_hours,
-        mode=mode,
+        mode=parse_mode(mode),
         option_count=option_count,
         weights=normalized_weights.model_dump(),
         include_reddit=include_reddit,
@@ -52,6 +55,13 @@ def run_command(
         video_style=video_style,
         video_duration_sec=video_duration_sec,
     )
+    transitions = run_pipeline(config)
+    terminal_state = transitions[-1] if transitions else RunState.FAILED
+
+    if terminal_state == RunState.FAILED:
+        typer.echo("Run failed", err=True)
+        raise typer.Exit(code=1)
+
     typer.echo(config.model_dump_json(indent=2))
 
 

@@ -1,4 +1,3 @@
-(A) Implement non-zero exit codes for terminal failure states in `app/cli.py` +cli +core
 (B) Implement unit tests for `RunConfig` validation boundaries in `tests/test_run_config.py` +testing +unit
 (B) Implement unit tests for weight normalization and negative input rejection in `tests/test_scoring_weights.py` +testing +unit
 (B) Implement unit tests for deadline budget splitting invariants in `tests/test_time_budget.py` +testing +unit
