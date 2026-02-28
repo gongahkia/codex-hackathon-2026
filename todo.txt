@@ -1,4 +1,3 @@
-(A) Implement low-detail detector for short spam-like descriptions in `app/services/content_quality.py` +research +quality
 (A) Implement quality penalty calculator in `app/services/quality_penalty.py` for stale and weak evidence signals +research +quality +scoring
 (A) Implement feature extraction for relevance score in `app/scoring/relevance.py` +scoring +ranking
 (A) Implement feature extraction for feasibility score in `app/scoring/feasibility.py` +scoring +ranking
