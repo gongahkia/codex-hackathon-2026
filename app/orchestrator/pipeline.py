@@ -35,6 +35,7 @@ from app.services.mode_policy import detailed_mode_source_limits, fast_mode_sour
 from app.services.ranking import ScoredCandidate, rank_candidates
 from app.services.recommendation import choose_recommendation_with_fallback
 from app.services.selection import prompt_for_selection
+from app.services.track_fit import TrackFitRecommendation
 from app.sources.registry import build_source_registry
 from app.storage import RunStore, SafeArtifactWriter
 from app.storage.cache import RunLocalSourceCache
@@ -66,11 +67,12 @@ PIPELINE_ORDER = [
 def run_pipeline(config: RunConfig) -> list[RunState]:
     """Run the pipeline and record state transitions."""
 
-    run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
+    run_id = config.resume_run_id or datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
     run_root = Path("runs") / run_id
     artifacts_dir = run_root / "artifacts"
     project_dir = run_root / "project"
     notes_path = run_root / "codex-notes.log"
+    resume_context_path = artifacts_dir / "resume-context.json"
 
     writer = SafeArtifactWriter(artifacts_dir)
     project_writer = SafeArtifactWriter(project_dir)
@@ -85,9 +87,21 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
     )
 
     store = RunStore(db_path="runs.db")
+    snapshot = store.get_run(run_id) if config.resume_run_id else None
     store.save_config(run_id, config.model_dump())
 
     transitions: list[RunState] = []
+    completed_states: set[RunState] = set()
+    if snapshot:
+        for transition in snapshot.get("transitions", []):
+            try:
+                state = RunState(transition)
+            except Exception:
+                continue
+            transitions.append(state)
+            if state in PIPELINE_ORDER:
+                completed_states.add(state)
+
     spec: ProjectSpec | None = None
     candidates: list[Candidate] = []
     ranked: list[ScoredCandidate] = []
@@ -103,8 +117,33 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
     fatal_errors: list[str] = []
     phase_timings = PhaseTimingCollector()
 
+    resume_context = _load_resume_context(resume_context_path)
+    candidates = [Candidate(**row) for row in resume_context.get("candidates", []) if isinstance(row, dict)]
+    ranked = [
+        _deserialize_scored_candidate(row)
+        for row in resume_context.get("ranked", [])
+        if isinstance(row, dict)
+    ]
+    selected_payload = resume_context.get("selected")
+    if isinstance(selected_payload, dict):
+        selected = _deserialize_scored_candidate(selected_payload)
+    spec_payload = resume_context.get("spec")
+    if isinstance(spec_payload, dict):
+        spec = ProjectSpec(**spec_payload)
+    generated_files = [
+        item for item in resume_context.get("generated_files", []) if isinstance(item, str)
+    ]
+    build_execution = resume_context.get("build_execution")
+    testing_report = resume_context.get("testing_report")
+    reliability_report = resume_context.get("reliability_report")
+    deployment_health_report = resume_context.get("deployment_health_report")
+    video_result = resume_context.get("video_result")
+
     try:
         for state in PIPELINE_ORDER:
+            if state in completed_states:
+                _append_note(notes_path, "RESUME_SKIP", state.value)
+                continue
             transitions.append(state)
             store.append_transition(run_id, state.value)
             _append_note(notes_path, "STATE", state.value)
@@ -127,6 +166,7 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                             "interactive_selection": config.interactive_selection,
                             "pause_for_feedback": config.pause_for_feedback,
                             "strict_fail_fast": config.strict_fail_fast,
+                            "resume_run_id": config.resume_run_id,
                             "allow_local_health": config.allow_local_health,
                             "run_log_path": str(notes_path.resolve()),
                         },
@@ -432,6 +472,20 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                         evidence_points=spec.features,
                     )
                     writer.write_json("pitch-narrative.json", pitch_scripts)
+
+                _write_resume_context(
+                    resume_context_path,
+                    candidates=candidates,
+                    ranked=ranked,
+                    selected=selected,
+                    spec=spec,
+                    generated_files=generated_files,
+                    build_execution=build_execution,
+                    testing_report=testing_report,
+                    reliability_report=reliability_report,
+                    deployment_health_report=deployment_health_report,
+                    video_result=video_result,
+                )
             except Exception as exc:
                 message = redact_secrets(str(exc))
                 writer.write_json(
@@ -989,6 +1043,98 @@ def _derive_error_code(message: str) -> str:
     if not head:
         return "UNSPECIFIED_ERROR"
     return "_".join(head.upper().split())[:80]
+
+
+def _load_resume_context(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return payload
+
+
+def _write_resume_context(
+    path: Path,
+    *,
+    candidates: list[Candidate],
+    ranked: list[ScoredCandidate],
+    selected: ScoredCandidate | None,
+    spec: ProjectSpec | None,
+    generated_files: list[str],
+    build_execution: Dict[str, Any] | None,
+    testing_report: Dict[str, Any] | None,
+    reliability_report: Dict[str, Any] | None,
+    deployment_health_report: Dict[str, Any] | None,
+    video_result: Dict[str, Any] | None,
+) -> None:
+    payload = {
+        "candidates": [candidate.model_dump(mode="json") for candidate in candidates],
+        "ranked": [_serialize_scored_candidate_for_resume(item) for item in ranked],
+        "selected": _serialize_scored_candidate_for_resume(selected) if selected else None,
+        "spec": spec.model_dump(mode="json") if spec else None,
+        "generated_files": generated_files,
+        "build_execution": build_execution,
+        "testing_report": testing_report,
+        "reliability_report": reliability_report,
+        "deployment_health_report": deployment_health_report,
+        "video_result": video_result,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _serialize_scored_candidate_for_resume(item: ScoredCandidate) -> Dict[str, Any]:
+    return {
+        "candidate": item.candidate.model_dump(mode="json"),
+        "factors": dict(item.factors),
+        "total_score": item.total_score,
+        "applied_weights": dict(item.applied_weights),
+        "track_fit": [
+            {
+                "track": rec.track,
+                "fit_score": rec.fit_score,
+                "competitiveness": rec.competitiveness,
+                "rationale": rec.rationale,
+            }
+            for rec in item.track_fit
+        ],
+    }
+
+
+def _deserialize_scored_candidate(payload: Dict[str, Any]) -> ScoredCandidate:
+    candidate_payload = payload.get("candidate", {})
+    candidate = Candidate(**candidate_payload) if isinstance(candidate_payload, dict) else Candidate(
+        title="Unknown",
+        summary="Recovered candidate",
+        urls=[],
+        stack=[],
+        signals={},
+        source="resume",
+    )
+    track_fit_payload = payload.get("track_fit", [])
+    track_fit = [
+        TrackFitRecommendation(
+            track=str(item.get("track", "")),
+            fit_score=float(item.get("fit_score", 0.0)),
+            competitiveness=str(item.get("competitiveness", "low")),
+            rationale=str(item.get("rationale", "")),
+        )
+        for item in track_fit_payload
+        if isinstance(item, dict)
+    ]
+    factors = payload.get("factors", {})
+    applied_weights = payload.get("applied_weights", {})
+    return ScoredCandidate(
+        candidate=candidate,
+        factors=factors if isinstance(factors, dict) else {},
+        total_score=float(payload.get("total_score", 0.0)),
+        applied_weights=applied_weights if isinstance(applied_weights, dict) else {},
+        track_fit=track_fit,
+    )
 
 
 def _build_command_history(

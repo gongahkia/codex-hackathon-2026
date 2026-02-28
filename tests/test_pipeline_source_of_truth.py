@@ -6,6 +6,7 @@ from pathlib import Path
 from app.models.run_config import RunConfig
 from app.models.run_state import RunState
 from app.orchestrator.pipeline import _search_source_with_timeout, run_pipeline
+from app.storage.run_store import RunStore
 
 
 def test_pipeline_writes_research_and_selection_artifacts(monkeypatch, tmp_path: Path) -> None:
@@ -293,6 +294,80 @@ def test_pipeline_records_phase_errors_and_recovers_in_non_strict_mode(
     )
     assert payload["state"] == "RANKING"
     assert payload["recovered"] is True
+
+
+def test_pipeline_resumes_from_next_unfinished_state(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.execute_render_with_fallback",
+        lambda command, *, config_json, cwd, timeout_seconds=600: {
+            "rendered": False,
+            "fallback": True,
+            "reason": "no-remotion",
+            "command": " ".join(command),
+            "config": config_json,
+        },
+    )
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.verify_candidates_evidence",
+        lambda candidates, policy=None: candidates,
+    )
+
+    run_id = "resume-run-001"
+    seed_config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
+    store = RunStore(db_path="runs.db")
+    store.save_config(run_id, seed_config.model_dump())
+    store.append_transition(run_id, RunState.INTAKE.value)
+    store.append_transition(run_id, RunState.RESEARCH.value)
+
+    context_path = tmp_path / "runs" / run_id / "artifacts" / "resume-context.json"
+    context_path.parent.mkdir(parents=True, exist_ok=True)
+    context_path.write_text(
+        json.dumps(
+            {
+                "candidates": [
+                    {
+                        "title": "Resume Candidate",
+                        "summary": "Recovered candidate context with build evidence.",
+                        "urls": [
+                            "https://github.com/acme/resume",
+                            "https://devpost.com/software/resume",
+                        ],
+                        "stack": ["Next.js"],
+                        "signals": {"complexity": "low", "setup_steps": 2},
+                        "source": "resume",
+                        "source_query": "Build secure AI planner",
+                    }
+                ],
+                "ranked": [],
+                "selected": None,
+                "spec": None,
+                "generated_files": [],
+                "build_execution": None,
+                "testing_report": None,
+                "reliability_report": None,
+                "deployment_health_report": None,
+                "video_result": None,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    resumed = RunConfig(
+        problem_statement="Build secure AI planner",
+        deadline_hours=6,
+        resume_run_id=run_id,
+    )
+    transitions = run_pipeline(resumed)
+    assert transitions[-1] == RunState.DONE
+    assert RunState.INTAKE in transitions
+    assert RunState.RESEARCH in transitions
+    assert RunState.RANKING in transitions
+
+    notes = (tmp_path / "runs" / run_id / "codex-notes.log").read_text(encoding="utf-8")
+    assert "RESUME_SKIP: INTAKE" in notes
+    assert "RESUME_SKIP: RESEARCH" in notes
 
 
 def test_pipeline_verifies_candidate_links_before_ranking(monkeypatch, tmp_path: Path) -> None:

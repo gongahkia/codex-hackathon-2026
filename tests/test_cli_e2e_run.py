@@ -119,3 +119,30 @@ def test_cli_maps_strict_fail_fast_flag(monkeypatch) -> None:
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert payload["strict_fail_fast"] is True
+
+
+def test_cli_maps_resume_run_id(monkeypatch) -> None:
+    runner = CliRunner()
+
+    def fake_run_pipeline(config):
+        assert config.resume_run_id == "run-123"
+        return [RunState.INTAKE, RunState.DONE]
+
+    monkeypatch.setattr("app.cli.run_pipeline", fake_run_pipeline)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--problem-statement",
+            "Build AI todo app",
+            "--deadline-hours",
+            "6",
+            "--resume-run-id",
+            "run-123",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["resume_run_id"] == "run-123"

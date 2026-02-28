@@ -75,6 +75,11 @@ def run_command(
         "--strict-fail-fast",
         help="Fail immediately on recoverable mid-run errors.",
     ),
+    resume_run_id: Optional[str] = typer.Option(
+        None,
+        "--resume-run-id",
+        help="Resume an existing run id from the next unfinished pipeline state.",
+    ),
     selected_option: Optional[int] = typer.Option(
         None,
         "--selected-option",
@@ -161,6 +166,7 @@ def run_command(
         pause_for_feedback=pause_for_feedback,
         feedback_checkpoints=parsed_feedback_checkpoints,
         strict_fail_fast=strict_fail_fast,
+        resume_run_id=resume_run_id,
         selected_option=selected_option,
         interactive_selection=interactive_selection,
         preferred_stack=preferred_stack,

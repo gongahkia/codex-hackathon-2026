@@ -35,6 +35,7 @@ def test_pause_for_feedback_defaults_to_false() -> None:
     cfg = RunConfig(problem_statement="x", deadline_hours=4)
     assert cfg.pause_for_feedback is False
     assert cfg.strict_fail_fast is False
+    assert cfg.resume_run_id is None
 
 
 def test_feedback_checkpoints_are_unique_and_sorted() -> None:

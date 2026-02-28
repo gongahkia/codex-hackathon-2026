@@ -32,6 +32,7 @@ class RunConfig(BaseModel):
     pause_for_feedback: bool = False
     feedback_checkpoints: List[int] = Field(default_factory=lambda: [25, 50, 75])
     strict_fail_fast: bool = False
+    resume_run_id: Optional[str] = None
     selected_option: Optional[int] = None
     interactive_selection: bool = False
     preferred_stack: Optional[str] = None
