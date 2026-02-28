@@ -1,4 +1,3 @@
-(A) Implement Remotion scene spec model in `app/models/video.py` with style and duration fields +video +remotion +model
 (A) Implement pitch-style storyboard generator in `app/video/storyboards/pitch.py` +video +remotion
 (A) Implement walkthrough storyboard generator in `app/video/storyboards/walkthrough.py` +video +remotion
 (A) Implement Remotion script composer that emits scene config JSON in `app/video/remotion_config.py` +video +remotion
