@@ -1,4 +1,3 @@
-(A) Implement run state machine enum in `app/models/run_state.py` with `INTAKE`, `RESEARCH`, `RANKING`, `SELECTION`, `BUILD`, `TEST`, `VIDEO`, `DONE`, `FAILED` +core +model
 (A) Implement orchestrator `run_pipeline(config)` in `app/orchestrator/pipeline.py` that transitions through run states +core +orchestrator
 (A) Implement structured run context object carrying config, budget, artifacts, and telemetry in `app/orchestrator/context.py` +core +orchestrator
 (A) Implement source adapter interface `SourceAdapter.search(problem, limit)` in `app/sources/base.py` +research +source
