@@ -6,6 +6,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 import json
 from pathlib import Path
+import shutil
 from typing import Any, Callable, Dict, List
 
 from app.generation.api_app import APIAppGenerator
@@ -118,6 +119,8 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
     warnings: list[str] = []
     recoveries: list[str] = []
     fatal_errors: list[str] = []
+    preflight_warnings: list[str] = []
+    seen_preflight: set[str] = set()
     phase_timings = PhaseTimingCollector()
     total_budget_minutes = config.deadline_hours * 60
     budget_snapshot = _build_budget_snapshot(total_budget_minutes)
@@ -157,6 +160,14 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
             _append_note(notes_path, "STATE", state.value)
             _append_progress_event(notes_path, run_id=run_id, phase=state.value, message="entered")
             phase_timings.start(state.value)
+
+            for warning in _state_preflight_warnings(state):
+                if warning in seen_preflight:
+                    continue
+                seen_preflight.add(warning)
+                preflight_warnings.append(warning)
+                warnings.append(warning)
+                _append_note(notes_path, "WARNING", warning)
 
             if _should_skip_state_for_budget(
                 state=state,
@@ -586,6 +597,7 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                 video_result=video_result,
             ),
         )
+        writer.write_json("preflight-checks.json", {"warnings": preflight_warnings})
         writer.write_json("phase-timings.json", phase_timings.as_dict())
         writer.write_json(
             "run-outcome.json",
@@ -620,6 +632,7 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                 video_result=video_result,
             ),
         )
+        writer.write_json("preflight-checks.json", {"warnings": preflight_warnings})
         writer.write_json("phase-timings.json", phase_timings.as_dict())
         writer.write_json(
             "run-outcome.json",
@@ -1168,6 +1181,28 @@ def _should_skip_video_render_for_budget(
     threshold_minutes: float = 2.0,
 ) -> bool:
     return _remaining_budget_minutes(total_budget_minutes, collected_timings) < threshold_minutes
+
+
+def _state_preflight_warnings(state: RunState) -> list[str]:
+    requirements = {
+        RunState.BUILD: {
+            "node": "Build phase may fail because `node` is not available in PATH.",
+            "npm": "Build phase may fail because `npm` is not available in PATH.",
+        },
+        RunState.TEST: {
+            "python3": "Test phase may skip Python integration fallback because `python3` is unavailable.",
+        },
+        RunState.VIDEO: {
+            "npx": "Video render will fallback to config-only output because `npx` is unavailable.",
+            "npm": "Video render may not execute because `npm` is unavailable.",
+        },
+    }
+    required = requirements.get(state, {})
+    warnings: list[str] = []
+    for binary, message in required.items():
+        if shutil.which(binary) is None:
+            warnings.append(message)
+    return warnings
 
 
 def _load_resume_context(path: Path) -> Dict[str, Any]:

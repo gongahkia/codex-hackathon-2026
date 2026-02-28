@@ -433,6 +433,37 @@ def test_pipeline_skips_heavy_video_render_when_remaining_budget_is_low(
     assert "low remaining budget" in video_result["reason"]
 
 
+def test_pipeline_emits_preflight_warnings_for_missing_binaries(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.execute_render_with_fallback",
+        lambda command, *, config_json, cwd, timeout_seconds=600: {
+            "rendered": False,
+            "fallback": True,
+            "reason": "no-remotion",
+            "command": " ".join(command),
+            "config": config_json,
+        },
+    )
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.shutil.which",
+        lambda binary: None if binary in {"node", "npm", "python3", "npx"} else f"/usr/bin/{binary}",
+    )
+
+    config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
+    transitions = run_pipeline(config)
+    assert transitions[-1] == RunState.DONE
+
+    run_dirs = list((tmp_path / "runs").glob("*"))
+    assert run_dirs
+    preflight = json.loads((run_dirs[0] / "artifacts" / "preflight-checks.json").read_text(encoding="utf-8"))
+    assert preflight["warnings"]
+    assert any("node" in warning for warning in preflight["warnings"])
+    assert any("npx" in warning for warning in preflight["warnings"])
+
+
 def test_pipeline_verifies_candidate_links_before_ranking(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
