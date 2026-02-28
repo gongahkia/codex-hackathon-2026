@@ -1,4 +1,3 @@
-(A) Implement progress event emitter for CLI status updates in `app/telemetry/progress.py` +telemetry +cli
 (A) Implement retry policy wrapper with jitter for source adapters in `app/resilience/retry.py` +resilience +research
 (A) Implement circuit breaker for repeatedly failing source adapters in `app/resilience/circuit_breaker.py` +resilience +research
 (A) Implement per-source timeout guard to prevent research starvation in `app/resilience/timeouts.py` +resilience +research +budget
