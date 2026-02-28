@@ -1,4 +1,3 @@
-(A) Implement ranking service `rank_candidates(candidates, weights)` in `app/services/ranking.py` +scoring +ranking
 (A) Implement top-N selector honoring `option_count` default 5 in `app/services/ranking.py` +scoring +ranking
 (A) Implement recommendation chooser selecting highest valid score above evidence gate in `app/services/recommendation.py` +scoring +ranking
 (A) Implement fallback recommendation path when all candidates fail evidence gate in `app/services/recommendation.py` +scoring +ranking
