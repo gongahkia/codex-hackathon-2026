@@ -1,4 +1,3 @@
-(A) Implement Remotion render command builder that outputs reproducible CLI command in `app/video/render_command.py` +video +remotion
 (A) Implement auto-render executor for MP4 artifact with timeout guard in `app/video/render_executor.py` +video +remotion +runtime
 (A) Implement video fallback that outputs config and command when render dependencies are missing in `app/video/render_executor.py` +video +remotion +runtime
 (A) Implement run artifact registry storing paths for matrix, project, tests, and video in `app/storage/artifacts.py` +storage +output
