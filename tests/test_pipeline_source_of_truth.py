@@ -101,25 +101,9 @@ def test_pipeline_auto_falls_back_to_top_candidate_when_evidence_gate_fails(
                 }
                 ]
 
-    class _SupportSource:
-        source_name = "support"
-
-        def search(self, problem: str, limit: int):
-            _ = (problem, limit)
-            return [
-                {
-                    "title": "Support Candidate",
-                    "summary": "Secondary candidate for source diversity.",
-                    "urls": ["https://github.com/acme/support", "https://devpost.com/software/support"],
-                    "stack": ["Django", "Redis", "Postgres", "Celery"],
-                    "signals": {"complexity": "high", "setup_steps": 8},
-                    "source": "support",
-                }
-            ]
-
     monkeypatch.setattr(
         "app.orchestrator.pipeline.build_source_registry",
-        lambda include_reddit=False, policy=None: {"single": _Source(), "support": _SupportSource()},
+        lambda include_reddit=False, policy=None: {"single": _Source()},
     )
 
     config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
