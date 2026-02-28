@@ -35,6 +35,7 @@ from app.services.mode_policy import detailed_mode_source_limits, fast_mode_sour
 from app.services.ranking import ScoredCandidate, rank_candidates
 from app.services.recommendation import choose_recommendation_with_fallback
 from app.services.selection import prompt_for_selection
+from app.services.time_budget import time_budget_splitter
 from app.services.track_fit import TrackFitRecommendation
 from app.sources.registry import build_source_registry
 from app.storage import RunStore, SafeArtifactWriter
@@ -116,6 +117,8 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
     recoveries: list[str] = []
     fatal_errors: list[str] = []
     phase_timings = PhaseTimingCollector()
+    total_budget_minutes = config.deadline_hours * 60
+    phase_budget_minutes = _derive_phase_budget_minutes(total_budget_minutes)
 
     resume_context = _load_resume_context(resume_context_path)
     candidates = [Candidate(**row) for row in resume_context.get("candidates", []) if isinstance(row, dict)]
@@ -149,6 +152,18 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
             _append_note(notes_path, "STATE", state.value)
             _append_progress_event(notes_path, run_id=run_id, phase=state.value, message="entered")
             phase_timings.start(state.value)
+
+            if _should_skip_state_for_budget(
+                state=state,
+                total_budget_minutes=total_budget_minutes,
+                phase_budget_minutes=phase_budget_minutes,
+                collected_timings=phase_timings.as_dict(),
+            ):
+                reason = f"state={state.value} skipped because budget is exhausted"
+                _append_note(notes_path, "BUDGET_SKIP", reason)
+                warnings.append(reason)
+                recoveries.append(state.value)
+                continue
 
             try:
                 if state == RunState.INTAKE:
@@ -1043,6 +1058,51 @@ def _derive_error_code(message: str) -> str:
     if not head:
         return "UNSPECIFIED_ERROR"
     return "_".join(head.upper().split())[:80]
+
+
+def _derive_phase_budget_minutes(total_minutes: int) -> Dict[RunState, int]:
+    split = time_budget_splitter(total_minutes)
+    if total_minutes <= 60:
+        return {
+            RunState.INTAKE: 5,
+            RunState.RESEARCH: 0,
+            RunState.RANKING: 0,
+            RunState.SELECTION: 5,
+            RunState.BUILD: int(split.get("implementation", 0)),
+            RunState.TEST: int(split.get("testing", 0)),
+            RunState.VIDEO: 0,
+        }
+
+    research_minutes = int(split.get("research", 0))
+    ranking_minutes = research_minutes // 2
+    return {
+        RunState.INTAKE: 5,
+        RunState.RESEARCH: max(0, research_minutes - ranking_minutes),
+        RunState.RANKING: ranking_minutes,
+        RunState.SELECTION: 5,
+        RunState.BUILD: int(split.get("implementation", 0)),
+        RunState.TEST: int(split.get("testing", 0)),
+        RunState.VIDEO: int(split.get("video", 0)),
+    }
+
+
+def _should_skip_state_for_budget(
+    *,
+    state: RunState,
+    total_budget_minutes: int,
+    phase_budget_minutes: Dict[RunState, int],
+    collected_timings: Dict[str, float],
+) -> bool:
+    if state not in {RunState.RESEARCH, RunState.RANKING, RunState.VIDEO}:
+        return False
+
+    state_budget = int(phase_budget_minutes.get(state, 0))
+    if state_budget > 0:
+        return False
+
+    consumed_minutes = sum(max(0.0, value) for value in collected_timings.values()) / 60.0
+    remaining_minutes = max(0.0, float(total_budget_minutes) - consumed_minutes)
+    return remaining_minutes <= 0 or state_budget == 0
 
 
 def _load_resume_context(path: Path) -> Dict[str, Any]:
