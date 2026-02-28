@@ -14,6 +14,8 @@ from app.models.candidate import Candidate
 from app.models.run_config import RunConfig
 from app.models.run_state import RunState
 from app.models.scoring import Weights
+from app.models.time_budget import BudgetSnapshot
+from app.orchestrator.context import RunContext
 from app.output.qa_pack import generate_judge_qa_pack
 from app.output.submission_artifacts import generate_submission_artifact
 from app.planner.checkpoints import CheckpointDecision, run_milestone_checkpoints
@@ -118,7 +120,10 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
     fatal_errors: list[str] = []
     phase_timings = PhaseTimingCollector()
     total_budget_minutes = config.deadline_hours * 60
-    phase_budget_minutes = _derive_phase_budget_minutes(total_budget_minutes)
+    budget_snapshot = _build_budget_snapshot(total_budget_minutes)
+    run_context = RunContext(config=config, budget=budget_snapshot)
+    phase_budget_minutes = _derive_phase_budget_minutes(run_context.budget or budget_snapshot)
+    writer.write_json("time-budget.json", (run_context.budget or budget_snapshot).model_dump())
 
     resume_context = _load_resume_context(resume_context_path)
     candidates = [Candidate(**row) for row in resume_context.get("candidates", []) if isinstance(row, dict)]
@@ -1060,29 +1065,51 @@ def _derive_error_code(message: str) -> str:
     return "_".join(head.upper().split())[:80]
 
 
-def _derive_phase_budget_minutes(total_minutes: int) -> Dict[RunState, int]:
+def _build_budget_snapshot(total_minutes: int) -> BudgetSnapshot:
     split = time_budget_splitter(total_minutes)
     if total_minutes <= 60:
-        return {
-            RunState.INTAKE: 5,
-            RunState.RESEARCH: 0,
-            RunState.RANKING: 0,
-            RunState.SELECTION: 5,
-            RunState.BUILD: int(split.get("implementation", 0)),
-            RunState.TEST: int(split.get("testing", 0)),
-            RunState.VIDEO: 0,
-        }
+        return BudgetSnapshot(
+            intake_minutes=5,
+            research_minutes=0,
+            ranking_minutes=0,
+            selection_minutes=5,
+            build_minutes=int(split.get("implementation", 0)),
+            test_minutes=int(split.get("testing", 0)),
+            video_minutes=0,
+        )
 
     research_minutes = int(split.get("research", 0))
     ranking_minutes = research_minutes // 2
+    return BudgetSnapshot(
+        intake_minutes=5,
+        research_minutes=max(0, research_minutes - ranking_minutes),
+        ranking_minutes=ranking_minutes,
+        selection_minutes=5,
+        build_minutes=int(split.get("implementation", 0)),
+        test_minutes=int(split.get("testing", 0)),
+        video_minutes=int(split.get("video", 0)),
+    )
+
+
+def _derive_phase_budget_minutes(snapshot: BudgetSnapshot) -> Dict[RunState, int]:
+    if snapshot.total_minutes <= 60:
+        return {
+            RunState.INTAKE: snapshot.intake_minutes,
+            RunState.RESEARCH: snapshot.research_minutes,
+            RunState.RANKING: snapshot.ranking_minutes,
+            RunState.SELECTION: snapshot.selection_minutes,
+            RunState.BUILD: snapshot.build_minutes,
+            RunState.TEST: snapshot.test_minutes,
+            RunState.VIDEO: 0,
+        }
     return {
-        RunState.INTAKE: 5,
-        RunState.RESEARCH: max(0, research_minutes - ranking_minutes),
-        RunState.RANKING: ranking_minutes,
-        RunState.SELECTION: 5,
-        RunState.BUILD: int(split.get("implementation", 0)),
-        RunState.TEST: int(split.get("testing", 0)),
-        RunState.VIDEO: int(split.get("video", 0)),
+        RunState.INTAKE: snapshot.intake_minutes,
+        RunState.RESEARCH: snapshot.research_minutes,
+        RunState.RANKING: snapshot.ranking_minutes,
+        RunState.SELECTION: snapshot.selection_minutes,
+        RunState.BUILD: snapshot.build_minutes,
+        RunState.TEST: snapshot.test_minutes,
+        RunState.VIDEO: snapshot.video_minutes,
     }
 
 

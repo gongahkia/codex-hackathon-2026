@@ -37,6 +37,7 @@ def test_pipeline_writes_research_and_selection_artifacts(monkeypatch, tmp_path:
     assert (artifacts / "testing-report.json").exists()
     assert (artifacts / "completion-contract.json").exists()
     assert (artifacts / "phase-timings.json").exists()
+    assert (artifacts / "time-budget.json").exists()
     assert (artifacts / "command-history.json").exists()
     assert (artifacts / "run-outcome.json").exists()
     assert (run_dirs[0] / "codex-notes.log").exists()
@@ -59,6 +60,9 @@ def test_pipeline_writes_research_and_selection_artifacts(monkeypatch, tmp_path:
     command_history = json.loads((artifacts / "command-history.json").read_text(encoding="utf-8"))
     assert isinstance(command_history, list)
     assert all({"command", "cwd", "duration_ms", "returncode"} <= set(item) for item in command_history)
+    budget = json.loads((artifacts / "time-budget.json").read_text(encoding="utf-8"))
+    assert "build_minutes" in budget
+    assert "test_minutes" in budget
     note_lines = (run_dirs[0] / "codex-notes.log").read_text(encoding="utf-8").splitlines()
     progress_lines = [line for line in note_lines if line.startswith("{")]
     assert progress_lines
