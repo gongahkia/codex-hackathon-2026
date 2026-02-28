@@ -16,6 +16,8 @@ Execute this skill to turn a hackathon problem statement into a shippable projec
 5. Keep Reddit disabled by default and require explicit opt-in with a noise disclaimer.
 6. Prefer one-click deploy targets when feasible; fallback to localhost instructions.
 7. Create a local run log by default with timestamped decisions, source findings, and uncertainty notes.
+8. Run in one-shot mode by default without pause checkpoints or interactive selection stops.
+9. Only pause for checkpoints when the initial user prompt explicitly asks for guardrails/feedback gates.
 
 ## Inputs
 
@@ -35,6 +37,7 @@ Collect and confirm:
 9. Log path (optional; default `runs/<timestamp>/codex-notes.log`).
 10. Judging rubric text and prize tracks (optional; ingest automatically when available).
 11. Deployment health URL for post-deploy watch checks (optional).
+12. Guardrail pause request (optional; disabled by default unless explicitly requested in the first prompt).
 
 Normalize scoring weights to sum to `1.0`.
 
@@ -138,7 +141,8 @@ Adjust weighted scoring using judging criteria when available.
 
 ### 5. User Selection Gate
 
-Require explicit user selection of one ranked option before implementation.
+Default behavior is automatic one-shot selection with no pause.
+Only require an interactive selection gate when the user explicitly requests guardrail pauses in the initial prompt.
 
 ### 6. Implementation
 
