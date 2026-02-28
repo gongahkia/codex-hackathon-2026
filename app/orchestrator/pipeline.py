@@ -191,7 +191,12 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                         per_source[source_name] = len(rows)
                         for row in rows:
                             try:
-                                gathered.append(Candidate(**row))
+                                candidate = Candidate(**row)
+                                if candidate.fetched_at is None:
+                                    candidate.fetched_at = datetime.now(UTC)
+                                if not candidate.source_query:
+                                    candidate.source_query = config.problem_statement
+                                gathered.append(candidate)
                             except Exception:
                                 continue
 
@@ -544,10 +549,17 @@ def _default_checkpoint_progress(config: RunConfig, spec: ProjectSpec) -> Dict[i
 def _serialize_scored_candidate(item: ScoredCandidate) -> Dict[str, Any]:
     verified_code_links = item.candidate.signals.get("verified_code_links", [])
     verified_writeup_links = item.candidate.signals.get("verified_writeup_links", [])
-    verification_errors = item.candidate.signals.get("verification_errors", [])
+    verification_errors = (
+        item.candidate.verification_errors
+        if item.candidate.verification_errors
+        else item.candidate.signals.get("verification_errors", [])
+    )
     return {
         "title": item.candidate.title,
         "source": item.candidate.source,
+        "fetched_at": item.candidate.fetched_at.isoformat() if item.candidate.fetched_at else None,
+        "verified_at": item.candidate.verified_at.isoformat() if item.candidate.verified_at else None,
+        "source_query": item.candidate.source_query,
         "total_score": item.total_score,
         "factors": dict(item.factors),
         "applied_weights": dict(item.applied_weights),
@@ -779,6 +791,8 @@ def _build_research_fallback_candidate(problem_statement: str) -> Candidate:
             "generated_from_problem_statement": problem_statement.strip(),
         },
         source="fallback",
+        source_query=problem_statement.strip(),
+        fetched_at=datetime.now(UTC),
     )
 
 

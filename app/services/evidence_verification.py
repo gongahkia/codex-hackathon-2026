@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from dataclasses import dataclass
 from typing import Callable, List
 from urllib.request import Request, urlopen
@@ -100,4 +101,6 @@ def verify_candidates_evidence(
         candidate.signals["verified_code_links"] = record.verified_code_links
         candidate.signals["verified_writeup_links"] = record.verified_writeup_links
         candidate.signals["verification_errors"] = record.verification_errors
+        candidate.verification_errors = list(record.verification_errors)
+        candidate.verified_at = datetime.now(UTC)
     return candidates

@@ -92,6 +92,7 @@ class DoraHacksAdapter(SourceAdapter):
                         "live_fetch": True,
                     },
                     "source": self.source_name,
+                    "source_query": normalized_problem,
                 }
             )
         return results

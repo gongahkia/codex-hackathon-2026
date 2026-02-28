@@ -55,6 +55,7 @@ class RedditAdapter(SourceAdapter):
                         "comments": data.get("num_comments", 0),
                     },
                     "source": self.source_name,
+                    "source_query": normalized_problem,
                 }
             )
         return results

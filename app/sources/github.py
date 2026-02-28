@@ -67,6 +67,7 @@ class GitHubAdapter(SourceAdapter):
                         "repo_updated_at": item.get("updated_at"),
                     },
                     "source": self.source_name,
+                    "source_query": normalized_problem,
                 }
             )
         return results
