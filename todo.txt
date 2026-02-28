@@ -1,4 +1,3 @@
-(A) Implement circuit breaker for repeatedly failing source adapters in `app/resilience/circuit_breaker.py` +resilience +research
 (A) Implement per-source timeout guard to prevent research starvation in `app/resilience/timeouts.py` +resilience +research +budget
 (A) Implement sandboxed command allowlist for build and test commands in `app/security/command_policy.py` +security +runtime
 (A) Implement secret redaction filter for logs in `app/security/redaction.py` +security +telemetry
