@@ -1,4 +1,3 @@
-(A) Implement vitest integration runner adapter in `app/testing/integration_vitest.py` +testing +integration
 (A) Implement smoke test runner that verifies app boot and key endpoint response in `app/testing/smoke.py` +testing +smoke
 (A) Implement test fallback controller that downgrades to next level on setup failure in `app/testing/fallback.py` +testing +budget
 (A) Implement testing report model with executed suite, pass rate, and skipped reasons in `app/models/testing_report.py` +testing +model +output
