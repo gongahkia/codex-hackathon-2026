@@ -1,4 +1,3 @@
-(A) Implement Reddit noise disclaimer gate in `app/services/source_policy.py` that requires explicit user confirmation +research +source-reddit +policy
 (A) Implement source registry in `app/sources/registry.py` with required defaults DoraHacks, Devpost, and GitHub +research +source
 (A) Implement fast mode source limits in `app/services/mode_policy.py` to reduce per-source query depth +research +budget +mode
 (A) Implement detailed mode source limits in `app/services/mode_policy.py` to increase per-source query depth +research +budget +mode
