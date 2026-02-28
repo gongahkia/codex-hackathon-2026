@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Dict, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 DEFAULT_WEIGHTS: Dict[str, float] = {
     "relevance": 0.35,
@@ -26,3 +26,10 @@ class RunConfig(BaseModel):
     preferred_stack: Optional[str] = None
     video_style: Literal["pitch", "walkthrough"] = "pitch"
     video_duration_sec: int = 60
+
+    @field_validator("deadline_hours")
+    @classmethod
+    def validate_deadline_hours(cls, value: int) -> int:
+        if value < 1 or value > 24:
+            raise ValueError("deadline_hours must be between 1 and 24")
+        return value
