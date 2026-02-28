@@ -127,3 +127,30 @@ def test_ranking_penalizes_stale_repositories() -> None:
     ranked = rank_candidates([stale, fresh], Weights(), problem_statement="Build AI helper")
     assert ranked[0].candidate.title == "Fresh Repo"
     assert "ranking_penalties" in stale.signals
+
+
+def test_ranking_penalizes_low_detail_summaries() -> None:
+    low_detail = Candidate(
+        title="Short Summary",
+        summary="Too short",
+        urls=["https://github.com/acme/short", "https://devpost.com/software/short"],
+        stack=["Next.js"],
+        signals={"setup_steps": 2, "complexity": "low"},
+        source="github",
+    )
+    rich_detail = Candidate(
+        title="Detailed Summary",
+        summary=(
+            "AI planner with timeline management, retry-safe workflows, deploy checks, "
+            "evidence-backed ranking, and deterministic fallback paths for demos."
+        ),
+        urls=["https://github.com/acme/rich", "https://devpost.com/software/rich"],
+        stack=["Next.js"],
+        signals={"setup_steps": 2, "complexity": "low"},
+        source="github",
+    )
+
+    ranked = rank_candidates([low_detail, rich_detail], Weights(), problem_statement="Build AI planner")
+    assert ranked[0].candidate.title == "Detailed Summary"
+    assert "ranking_penalties" in low_detail.signals
+    assert "content_detail_penalty" in ranked[1].factors

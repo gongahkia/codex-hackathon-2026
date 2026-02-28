@@ -13,6 +13,7 @@ from app.scoring.feasibility import feasibility_score
 from app.scoring.relevance import relevance_score
 from app.scoring.rubric import derive_judging_weights
 from app.scoring.speed import speed_to_build_score
+from app.services.content_quality import is_low_detail_description
 from app.services.repo_freshness import is_repo_stale
 from app.services.track_fit import TrackFitRecommendation, recommend_track_fit
 
@@ -49,6 +50,7 @@ def rank_candidates(
         }
         _apply_unreachable_evidence_penalty(candidate, factors)
         _apply_repo_freshness_penalty(candidate, factors)
+        _apply_low_detail_penalty(candidate, factors)
         total = aggregate_weighted_score(factors, effective_weights)
         scored.append(
             ScoredCandidate(
@@ -98,6 +100,21 @@ def _apply_repo_freshness_penalty(
     reasons = candidate.signals.setdefault("ranking_penalties", [])
     if isinstance(reasons, list):
         reasons.append("Repository is stale; feasibility score penalized")
+
+
+def _apply_low_detail_penalty(
+    candidate: Candidate,
+    factors: dict[str, float],
+) -> None:
+    if not is_low_detail_description(candidate.summary):
+        return
+
+    penalty = 0.15
+    factors["relevance"] = max(0.0, factors["relevance"] - penalty)
+    factors["content_detail_penalty"] = penalty
+    reasons = candidate.signals.setdefault("ranking_penalties", [])
+    if isinstance(reasons, list):
+        reasons.append("Low-detail summary; relevance score penalized")
 
 
 def select_top_candidates(
