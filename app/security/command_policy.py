@@ -10,6 +10,7 @@ ALLOWED_PREFIXES = {
     ("npm", "run", "test"),
     ("npm", "run", "test:integration"),
     ("pytest",),
+    ("python3", "-m", "pytest"),
     ("python3", "-m", "unittest"),
     ("npx", "playwright", "test"),
     ("npm", "exec", "--yes", "--package=@remotion/cli@4.0.429", "--", "remotion", "render"),

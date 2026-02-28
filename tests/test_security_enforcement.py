@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from app.runtime.command_runner import run_command_streamed
+from app.security.command_policy import is_allowed_command
 from app.security.redaction import redact_secrets
 from app.security.url_policy import UrlPolicy, validate_safe_url
 from app.storage.safe_writer import SafeArtifactWriter
@@ -13,6 +14,10 @@ from app.storage.safe_writer import SafeArtifactWriter
 def test_command_runner_enforces_allowlist() -> None:
     with pytest.raises(PermissionError):
         run_command_streamed(["echo", "hello"])
+
+
+def test_command_policy_allows_python_pytest_fallback() -> None:
+    assert is_allowed_command(["python3", "-m", "pytest", "-m", "integration"])
 
 
 def test_redaction_masks_secret_material() -> None:
