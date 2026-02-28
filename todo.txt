@@ -1,4 +1,3 @@
-(A) Implement quality penalty calculator in `app/services/quality_penalty.py` for stale and weak evidence signals +research +quality +scoring
 (A) Implement feature extraction for relevance score in `app/scoring/relevance.py` +scoring +ranking
 (A) Implement feature extraction for feasibility score in `app/scoring/feasibility.py` +scoring +ranking
 (A) Implement feature extraction for speed-to-build score in `app/scoring/speed.py` +scoring +ranking
