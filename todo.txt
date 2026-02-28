@@ -1,4 +1,3 @@
-(A) Implement auto-render executor for MP4 artifact with timeout guard in `app/video/render_executor.py` +video +remotion +runtime
 (A) Implement video fallback that outputs config and command when render dependencies are missing in `app/video/render_executor.py` +video +remotion +runtime
 (A) Implement run artifact registry storing paths for matrix, project, tests, and video in `app/storage/artifacts.py` +storage +output
 (A) Implement SQLite run store for config, state transitions, and final status in `app/storage/run_store.py` +storage +db
