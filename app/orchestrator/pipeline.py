@@ -137,6 +137,10 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                 deduped = dedupe_by_url_hash(gathered)
                 deduped = dedupe_by_title_similarity(deduped)
                 candidates = deduped
+                used_research_fallback = False
+                if not candidates:
+                    candidates = [_build_research_fallback_candidate(config.problem_statement)]
+                    used_research_fallback = True
 
                 writer.write_json(
                     "research-summary.json",
@@ -144,6 +148,10 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                         "raw_candidate_count": len(gathered),
                         "deduped_candidate_count": len(candidates),
                         "per_source": per_source,
+                        "used_fallback_candidate": used_research_fallback,
+                        "fallback_provenance": (
+                            candidates[0].signals.get("provenance") if used_research_fallback else None
+                        ),
                     },
                 )
                 _append_note(
@@ -151,9 +159,6 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                     "RESEARCH",
                     f"raw={len(gathered)} deduped={len(candidates)} per_source={per_source}",
                 )
-
-                if not candidates:
-                    raise RuntimeError("No candidates found from configured sources")
 
             if state == RunState.RANKING:
                 if not candidates:
@@ -582,6 +587,22 @@ def _build_execution_passed(build_execution: Dict[str, Any] | None) -> bool:
         }
 
     return False
+
+
+def _build_research_fallback_candidate(problem_statement: str) -> Candidate:
+    title = f"{problem_statement.strip()} (deterministic fallback)"
+    return Candidate(
+        title=title,
+        summary="Generated fallback candidate because live research returned no viable options.",
+        urls=[],
+        stack=["Next.js", "SQLite"],
+        signals={
+            "provenance": "deterministic-research-fallback",
+            "fallback_reason": "no_research_candidates",
+            "generated_from_problem_statement": problem_statement.strip(),
+        },
+        source="fallback",
+    )
 
 
 def _evaluate_completion_contract(

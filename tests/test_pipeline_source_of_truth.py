@@ -95,6 +95,50 @@ def test_pipeline_auto_falls_back_to_top_candidate_when_evidence_gate_fails(
     assert selection["recommendation_fallback_used"] is True
 
 
+def test_pipeline_creates_deterministic_candidate_when_research_is_empty(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.execute_render_with_fallback",
+        lambda command, *, config_json, cwd, timeout_seconds=600: {
+            "rendered": False,
+            "fallback": True,
+            "reason": "no-remotion",
+            "command": " ".join(command),
+            "config": config_json,
+        },
+    )
+
+    class _EmptySource:
+        source_name = "empty"
+
+        def search(self, problem: str, limit: int):
+            _ = (problem, limit)
+            return []
+
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.build_source_registry",
+        lambda include_reddit=False, policy=None: {"empty": _EmptySource()},
+    )
+
+    config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
+    transitions = run_pipeline(config)
+    assert transitions[-1] == RunState.DONE
+
+    run_dirs = list((tmp_path / "runs").glob("*"))
+    assert run_dirs
+    artifacts = run_dirs[0] / "artifacts"
+    research = json.loads((artifacts / "research-summary.json").read_text(encoding="utf-8"))
+    selection = json.loads((artifacts / "selection.json").read_text(encoding="utf-8"))
+
+    assert research["raw_candidate_count"] == 0
+    assert research["deduped_candidate_count"] == 1
+    assert research["used_fallback_candidate"] is True
+    assert research["fallback_provenance"] == "deterministic-research-fallback"
+    assert selection["selected_source"] == "fallback"
+
+
 def test_pipeline_fails_when_completion_contract_is_not_met(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
