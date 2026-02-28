@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from difflib import SequenceMatcher
 from typing import Iterable, List
 
 from app.models.candidate import Candidate
@@ -26,4 +27,24 @@ def dedupe_by_url_hash(candidates: Iterable[Candidate]) -> List[Candidate]:
             continue
         seen.add(digest)
         unique.append(candidate)
+    return unique
+
+
+def dedupe_by_title_similarity(
+    candidates: Iterable[Candidate], threshold: float = 0.88
+) -> List[Candidate]:
+    """Deduplicate candidates whose titles are semantically too similar."""
+
+    unique: List[Candidate] = []
+    for candidate in candidates:
+        title = candidate.title.lower().strip()
+        is_duplicate = False
+        for existing in unique:
+            existing_title = existing.title.lower().strip()
+            similarity = SequenceMatcher(None, title, existing_title).ratio()
+            if similarity >= threshold:
+                is_duplicate = True
+                break
+        if not is_duplicate:
+            unique.append(candidate)
     return unique
