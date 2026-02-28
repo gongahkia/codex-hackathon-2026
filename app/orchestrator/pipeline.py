@@ -780,10 +780,13 @@ def _generate_project_files(spec: ProjectSpec) -> tuple[str, dict[str, str]]:
 
 def _run_build_execution(project_root: Path) -> Dict[str, Any]:
     if (project_root / "package.json").exists():
-        result = run_dependency_install(cwd=project_root, command=("npm", "install"), retries=1)
+        install_command = ("npm", "install")
+        if (project_root / "package-lock.json").exists() or (project_root / "npm-shrinkwrap.json").exists():
+            install_command = ("npm", "ci")
+        result = run_dependency_install(cwd=project_root, command=install_command, retries=1)
         return {
             "status": "executed",
-            "command": ["npm", "install"],
+            "command": list(install_command),
             "cwd": str(project_root),
             "returncode": result.returncode,
             "timed_out": result.timed_out,
