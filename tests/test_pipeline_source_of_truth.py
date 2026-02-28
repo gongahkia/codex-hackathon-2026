@@ -171,7 +171,7 @@ def test_pipeline_injects_fallback_ranked_option_when_ranking_returns_empty(
     assert ranking["ranked_candidates"][0]["fallback_injected"] is True
 
 
-def test_pipeline_fails_when_completion_contract_is_not_met(monkeypatch, tmp_path: Path) -> None:
+def test_pipeline_warns_when_completion_contract_is_not_met(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
         "app.orchestrator.pipeline.execute_render_with_fallback",
@@ -195,7 +195,7 @@ def test_pipeline_fails_when_completion_contract_is_not_met(monkeypatch, tmp_pat
 
     config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
     transitions = run_pipeline(config)
-    assert transitions[-1] == RunState.FAILED
+    assert transitions[-1] == RunState.DONE
 
     run_dirs = list((tmp_path / "runs").glob("*"))
     assert run_dirs
@@ -204,6 +204,41 @@ def test_pipeline_fails_when_completion_contract_is_not_met(monkeypatch, tmp_pat
     completion = json.loads((artifacts / "completion-contract.json").read_text(encoding="utf-8"))
     assert completion["passed"] is False
     assert "tests_passed" in completion["failed_checks"]
+    assert "warning" in completion
+    assert completion["strict_fail_fast"] is False
+
+
+def test_pipeline_fails_when_completion_contract_is_not_met_in_strict_mode(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.execute_render_with_fallback",
+        lambda command, *, config_json, cwd, timeout_seconds=600: {
+            "rendered": False,
+            "fallback": True,
+            "reason": "no-remotion",
+            "command": " ".join(command),
+            "config": config_json,
+        },
+    )
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline._execute_testing_fallback",
+        lambda **kwargs: {
+            "executed_suite": "none",
+            "planned_suites": ["integration", "smoke"],
+            "skipped_reasons": {"integration": "suite failed", "smoke": "suite failed"},
+            "pass_rate": 0.0,
+        },
+    )
+
+    config = RunConfig(
+        problem_statement="Build secure AI planner",
+        deadline_hours=6,
+        strict_fail_fast=True,
+    )
+    transitions = run_pipeline(config)
+    assert transitions[-1] == RunState.FAILED
 
 
 def test_pipeline_skips_interactive_prompt_when_pause_for_feedback_is_disabled(

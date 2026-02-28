@@ -344,15 +344,22 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
             reliability_report=reliability_report,
             deployment_health_report=deployment_health_report,
         )
+        completion_warning: str | None = None
+        if not completion["passed"]:
+            failed = ", ".join(completion["failed_checks"])
+            completion_warning = f"Completion contract failed: {failed}"
+            completion["warning"] = completion_warning
+            completion["strict_fail_fast"] = config.strict_fail_fast
         writer.write_json("completion-contract.json", completion)
         _append_note(
             notes_path,
             "COMPLETION",
             f"passed={completion['passed']} failed={len(completion['failed_checks'])}",
         )
-        if not completion["passed"]:
-            failed = ", ".join(completion["failed_checks"])
-            raise RuntimeError(f"Completion contract failed: {failed}")
+        if completion_warning:
+            if config.strict_fail_fast:
+                raise RuntimeError(completion_warning)
+            _append_note(notes_path, "WARNING", completion_warning)
 
         transitions.append(RunState.DONE)
         store.append_transition(run_id, RunState.DONE.value)
