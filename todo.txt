@@ -1,4 +1,3 @@
-(A) Implement fallback recommendation path when all candidates fail evidence gate in `app/services/recommendation.py` +scoring +ranking
 (A) Implement short recommendation summary renderer in `app/output/summary.py` +output +ranking
 (A) Implement detailed matrix renderer with per-factor scores and source links in `app/output/matrix.py` +output +ranking
 (A) Implement explicit user selection prompt that blocks build phase until option index is chosen in `app/services/selection.py` +selection +core
