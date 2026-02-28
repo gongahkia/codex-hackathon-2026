@@ -1,4 +1,3 @@
-(A) Implement project spec generator from selected candidate in `app/planner/project_spec.py` with features, stack, and milestones +planner +builder
 (A) Implement deadline-aware scope trimmer that drops non-core features when budget risk rises in `app/planner/scope_trimmer.py` +planner +budget +builder
 (A) Implement build plan model with ordered tasks and time estimates in `app/models/build_plan.py` +planner +model +builder
 (A) Implement stack resolver that picks fastest default stack when user has no preference in `app/planner/stack_resolver.py` +planner +builder
