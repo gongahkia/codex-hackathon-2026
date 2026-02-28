@@ -41,3 +41,15 @@ def extract_build_writeup_links(candidate: Candidate) -> List[str]:
         ):
             links.append(url)
     return links
+
+
+def count_independent_source_domains(candidates: Iterable[Candidate]) -> int:
+    """Count unique source domains represented in candidate URLs."""
+
+    domains: set[str] = set()
+    for candidate in candidates:
+        for url in candidate.urls:
+            domain = urlparse(url).netloc.lower()
+            if domain:
+                domains.add(domain)
+    return len(domains)
