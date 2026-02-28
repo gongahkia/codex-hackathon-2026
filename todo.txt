@@ -1,4 +1,3 @@
-(A) Implement orchestrator `run_pipeline(config)` in `app/orchestrator/pipeline.py` that transitions through run states +core +orchestrator
 (A) Implement structured run context object carrying config, budget, artifacts, and telemetry in `app/orchestrator/context.py` +core +orchestrator
 (A) Implement source adapter interface `SourceAdapter.search(problem, limit)` in `app/sources/base.py` +research +source
 (A) Implement DoraHacks adapter in `app/sources/dorahacks.py` returning normalized candidate records +research +source-dorahacks
