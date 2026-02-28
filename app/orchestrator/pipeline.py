@@ -18,7 +18,7 @@ from app.planner.checkpoints import CheckpointDecision, run_milestone_checkpoint
 from app.planner.project_spec import ProjectSpec
 from app.runtime.command_runner import CommandResult
 from app.runtime.demo_reliability import run_demo_reliability_mode
-from app.runtime.deployment_watch import enforce_deployment_health
+from app.runtime.deployment_watch import enforce_deployment_health, watch_deployment_health
 from app.runtime.healthcheck import probe_dev_server
 from app.runtime.install import run_dependency_install
 from app.security.redaction import redact_secrets
@@ -300,14 +300,30 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                 reliability_report = reliability.to_dict()
                 writer.write_json("demo-reliability.json", reliability_report)
 
-                if config.allow_local_health:
-                    health_report = enforce_deployment_health(
-                        config.deployment_health_url,
-                        policy=_runtime_health_policy(True),
-                    )
-                else:
-                    health_report = enforce_deployment_health(config.deployment_health_url)
+                health_warning: str | None = None
+                try:
+                    if config.allow_local_health:
+                        health_report = enforce_deployment_health(
+                            config.deployment_health_url,
+                            policy=_runtime_health_policy(True),
+                        )
+                    else:
+                        health_report = enforce_deployment_health(config.deployment_health_url)
+                except Exception as exc:
+                    if config.strict_fail_fast:
+                        raise
+                    health_warning = redact_secrets(str(exc))
+                    _append_note(notes_path, "WARNING", f"deployment_health: {health_warning}")
+                    try:
+                        health_report = watch_deployment_health(
+                            config.deployment_health_url,
+                            policy=_runtime_health_policy(config.allow_local_health),
+                        )
+                    except Exception:
+                        health_report = watch_deployment_health(None)
                 deployment_health_report = health_report.to_dict()
+                if health_warning:
+                    deployment_health_report["warning"] = health_warning
                 writer.write_json("deployment-health.json", deployment_health_report)
 
                 testing_report = _execute_testing_fallback(
