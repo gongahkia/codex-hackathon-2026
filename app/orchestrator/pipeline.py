@@ -25,6 +25,7 @@ from app.security.redaction import redact_secrets
 from app.security.url_policy import UrlPolicy
 from app.services.dedupe import dedupe_by_title_similarity, dedupe_by_url_hash
 from app.services.evidence_gate import passes_minimum_evidence
+from app.services.evidence_verification import verify_candidates_evidence
 from app.services.mode_policy import detailed_mode_source_limits, fast_mode_source_limits
 from app.services.ranking import ScoredCandidate, rank_candidates
 from app.services.recommendation import choose_recommendation_with_fallback
@@ -146,6 +147,7 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                     if not candidates:
                         candidates = [_build_research_fallback_candidate(config.problem_statement)]
                         used_research_fallback = True
+                    candidates = verify_candidates_evidence(candidates, policy=policy)
 
                     writer.write_json(
                         "research-summary.json",
@@ -156,6 +158,12 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                             "used_fallback_candidate": used_research_fallback,
                             "fallback_provenance": (
                                 candidates[0].signals.get("provenance") if used_research_fallback else None
+                            ),
+                            "verified_code_candidate_count": sum(
+                                1 for candidate in candidates if candidate.signals.get("verified_code_links")
+                            ),
+                            "verified_writeup_candidate_count": sum(
+                                1 for candidate in candidates if candidate.signals.get("verified_writeup_links")
                             ),
                         },
                     )

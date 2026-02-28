@@ -207,6 +207,66 @@ def test_pipeline_records_phase_errors_and_recovers_in_non_strict_mode(
     assert payload["recovered"] is True
 
 
+def test_pipeline_verifies_candidate_links_before_ranking(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.execute_render_with_fallback",
+        lambda command, *, config_json, cwd, timeout_seconds=600: {
+            "rendered": False,
+            "fallback": True,
+            "reason": "no-remotion",
+            "command": " ".join(command),
+            "config": config_json,
+        },
+    )
+
+    class _Source:
+        source_name = "single"
+
+        def search(self, problem: str, limit: int):
+            _ = (problem, limit)
+            return [
+                {
+                    "title": "AI Planner",
+                    "summary": "Planner",
+                    "urls": [
+                        "https://github.com/acme/planner",
+                        "https://devpost.com/software/planner",
+                    ],
+                    "stack": ["Next.js"],
+                    "signals": {"complexity": "low", "setup_steps": 2},
+                    "source": "single",
+                }
+            ]
+
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.build_source_registry",
+        lambda include_reddit=False, policy=None: {"single": _Source()},
+    )
+
+    def fake_verify(candidates, policy=None):
+        _ = policy
+        for candidate in candidates:
+            candidate.signals["verified_code_links"] = ["https://github.com/acme/planner"]
+            candidate.signals["verified_writeup_links"] = ["https://devpost.com/software/planner"]
+            candidate.signals["verification_errors"] = []
+        return candidates
+
+    monkeypatch.setattr("app.orchestrator.pipeline.verify_candidates_evidence", fake_verify)
+
+    def fake_rank(candidates, *args, **kwargs):
+        _ = (args, kwargs)
+        assert candidates[0].signals["verified_code_links"]
+        assert candidates[0].signals["verified_writeup_links"]
+        return []
+
+    monkeypatch.setattr("app.orchestrator.pipeline.rank_candidates", fake_rank)
+
+    config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
+    transitions = run_pipeline(config)
+    assert transitions[-1] == RunState.DONE
+
+
 def test_pipeline_warns_when_completion_contract_is_not_met(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
