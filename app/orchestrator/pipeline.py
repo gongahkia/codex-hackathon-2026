@@ -97,6 +97,7 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
     testing_report: Dict[str, Any] | None = None
     reliability_report: Dict[str, Any] | None = None
     deployment_health_report: Dict[str, Any] | None = None
+    video_result: Dict[str, Any] | None = None
     warnings: list[str] = []
     recoveries: list[str] = []
     fatal_errors: list[str] = []
@@ -420,7 +421,7 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                     )
 
                 if state == RunState.VIDEO:
-                    _auto_generate_video(config, writer, run_root)
+                    video_result = _auto_generate_video(config, writer, run_root)
                     if spec is None:
                         spec = _default_build_spec(config, selected)
 
@@ -479,6 +480,14 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
             warnings.append(completion_warning)
             recoveries.append("COMPLETION")
 
+        writer.write_json(
+            "command-history.json",
+            _build_command_history(
+                build_execution=build_execution,
+                testing_report=testing_report,
+                video_result=video_result,
+            ),
+        )
         writer.write_json("phase-timings.json", phase_timings.as_dict())
         writer.write_json(
             "run-outcome.json",
@@ -505,6 +514,14 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
         fatal_error = redact_secrets(str(exc))
         fatal_errors.append(fatal_error)
         writer.write_json("pipeline-error.json", {"error": fatal_error})
+        writer.write_json(
+            "command-history.json",
+            _build_command_history(
+                build_execution=build_execution,
+                testing_report=testing_report,
+                video_result=video_result,
+            ),
+        )
         writer.write_json("phase-timings.json", phase_timings.as_dict())
         writer.write_json(
             "run-outcome.json",
@@ -656,8 +673,10 @@ def _run_build_execution(project_root: Path) -> Dict[str, Any]:
         return {
             "status": "executed",
             "command": ["npm", "install"],
+            "cwd": str(project_root),
             "returncode": result.returncode,
             "timed_out": result.timed_out,
+            "duration_ms": result.duration_ms,
             "stdout": redact_secrets(result.stdout),
             "stderr": redact_secrets(result.stderr),
         }
@@ -736,6 +755,7 @@ def _execute_testing_fallback(
             "stdout": redact_secrets(fallback.result.stdout),
             "stderr": redact_secrets(fallback.result.stderr),
             "timed_out": fallback.result.timed_out,
+            "duration_ms": fallback.result.duration_ms,
         }
 
     return result_payload
@@ -904,6 +924,7 @@ def _serialize_render_result(payload: Dict[str, Any]) -> Dict[str, Any]:
             "stdout": redact_secrets(result.stdout),
             "stderr": redact_secrets(result.stderr),
             "timed_out": result.timed_out,
+            "duration_ms": result.duration_ms,
         }
     return serializable
 
@@ -918,7 +939,11 @@ def _serialize_checkpoint_decision(decision: CheckpointDecision) -> Dict[str, An
     }
 
 
-def _auto_generate_video(config: RunConfig, writer: SafeArtifactWriter, run_root: Path) -> None:
+def _auto_generate_video(
+    config: RunConfig,
+    writer: SafeArtifactWriter,
+    run_root: Path,
+) -> Dict[str, Any]:
     scenes = _build_storyboard(config)
     config_json = compose_remotion_config(scenes)
     config_path = writer.write_text("remotion.config.json", config_json)
@@ -935,7 +960,9 @@ def _auto_generate_video(config: RunConfig, writer: SafeArtifactWriter, run_root
         config_json=config_json,
         cwd=video_workspace,
     )
-    writer.write_json("video-result.json", _serialize_render_result(render_result))
+    serialized = _serialize_render_result(render_result)
+    writer.write_json("video-result.json", serialized)
+    return serialized
 
 
 def _append_note(path: Path, event: str, detail: str) -> None:
@@ -962,3 +989,60 @@ def _derive_error_code(message: str) -> str:
     if not head:
         return "UNSPECIFIED_ERROR"
     return "_".join(head.upper().split())[:80]
+
+
+def _build_command_history(
+    *,
+    build_execution: Dict[str, Any] | None,
+    testing_report: Dict[str, Any] | None,
+    video_result: Dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    history: list[dict[str, Any]] = []
+
+    if build_execution and build_execution.get("status") == "executed":
+        command = build_execution.get("command", [])
+        if isinstance(command, list):
+            command_text = " ".join(str(item) for item in command)
+        else:
+            command_text = str(command)
+        history.append(
+            {
+                "command": command_text,
+                "cwd": str(build_execution.get("cwd", "")),
+                "duration_ms": int(build_execution.get("duration_ms", 0) or 0),
+                "returncode": int(build_execution.get("returncode", 1) or 1),
+            }
+        )
+
+    test_result = (testing_report or {}).get("result", {})
+    if isinstance(test_result, dict):
+        command = test_result.get("command")
+        if command:
+            history.append(
+                {
+                    "command": str(command),
+                    "cwd": str(test_result.get("cwd", "")),
+                    "duration_ms": int(test_result.get("duration_ms", 0) or 0),
+                    "returncode": int(test_result.get("returncode", 1) or 1),
+                }
+            )
+
+    if isinstance(video_result, dict):
+        command = video_result.get("command")
+        result = video_result.get("result", {})
+        if command:
+            returncode = 0
+            duration_ms = 0
+            if isinstance(result, dict):
+                returncode = int(result.get("returncode", 0) or 0)
+                duration_ms = int(result.get("duration_ms", 0) or 0)
+            history.append(
+                {
+                    "command": str(command),
+                    "cwd": "",
+                    "duration_ms": duration_ms,
+                    "returncode": returncode,
+                }
+            )
+
+    return history

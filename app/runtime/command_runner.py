@@ -22,6 +22,7 @@ class CommandResult:
     stdout: str
     stderr: str
     timed_out: bool = False
+    duration_ms: int = 0
 
 
 def run_command_streamed(
@@ -77,9 +78,11 @@ def run_command_streamed(
                 on_output(stripped)
 
     process.wait()
+    duration_ms = int((time.monotonic() - start) * 1000)
     return CommandResult(
         returncode=process.returncode,
         stdout="\n".join(stdout_lines),
         stderr="\n".join(stderr_lines),
         timed_out=timed_out,
+        duration_ms=duration_ms,
     )
