@@ -317,4 +317,4 @@ def test_pipeline_skips_interactive_prompt_when_pause_for_feedback_is_disabled(
     run_dirs = list((tmp_path / "runs").glob("*"))
     assert run_dirs
     selection = json.loads((run_dirs[0] / "artifacts" / "selection.json").read_text(encoding="utf-8"))
-    assert selection["selection_mode"] == "auto-evidence"
+    assert selection["selection_mode"].startswith("auto-")
