@@ -56,3 +56,43 @@ def test_research_to_ranking_pipeline_with_mocked_sources() -> None:
     assert len(top_two) == 2
     assert top_two[0].total_score >= top_two[1].total_score
     assert top_two[0].candidate.title == "AI Planner"
+
+
+def test_ranking_downranks_candidates_with_unreachable_verified_evidence() -> None:
+    unreachable = Candidate(
+        title="Unreachable Evidence",
+        summary="Looks promising",
+        urls=["https://github.com/acme/unreachable", "https://devpost.com/software/unreachable"],
+        stack=["Next.js"],
+        signals={
+            "setup_steps": 2,
+            "complexity": "low",
+            "verified_code_links": [],
+            "verified_writeup_links": [],
+            "verification_errors": ["https://github.com/acme/unreachable: timeout"],
+        },
+        source="github",
+    )
+    reachable = Candidate(
+        title="Reachable Evidence",
+        summary="Looks promising",
+        urls=["https://github.com/acme/reachable", "https://devpost.com/software/reachable"],
+        stack=["Next.js"],
+        signals={
+            "setup_steps": 2,
+            "complexity": "low",
+            "verified_code_links": ["https://github.com/acme/reachable"],
+            "verified_writeup_links": ["https://devpost.com/software/reachable"],
+            "verification_errors": [],
+        },
+        source="github",
+    )
+
+    ranked = rank_candidates(
+        [unreachable, reachable],
+        Weights(),
+        problem_statement="Build AI planner",
+    )
+
+    assert ranked[0].candidate.title == "Reachable Evidence"
+    assert "ranking_penalties" in unreachable.signals

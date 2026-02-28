@@ -46,6 +46,7 @@ def rank_candidates(
             "speed": speed_to_build_score(candidate),
             "evidence": evidence_quality_score(candidate, candidate_list),
         }
+        _apply_unreachable_evidence_penalty(candidate, factors)
         total = aggregate_weighted_score(factors, effective_weights)
         scored.append(
             ScoredCandidate(
@@ -58,6 +59,25 @@ def rank_candidates(
         )
 
     return sorted(scored, key=lambda item: item.total_score, reverse=True)
+
+
+def _apply_unreachable_evidence_penalty(
+    candidate: Candidate,
+    factors: dict[str, float],
+) -> None:
+    verified_code = candidate.signals.get("verified_code_links", [])
+    verified_writeup = candidate.signals.get("verified_writeup_links", [])
+    verification_errors = candidate.signals.get("verification_errors", [])
+
+    has_verified = bool(verified_code) or bool(verified_writeup)
+    has_errors = bool(verification_errors)
+    if has_verified or not has_errors:
+        return
+
+    factors["evidence"] = 0.0
+    reasons = candidate.signals.setdefault("ranking_penalties", [])
+    if isinstance(reasons, list):
+        reasons.append("Unreachable evidence URLs; evidence score forced to zero")
 
 
 def select_top_candidates(
