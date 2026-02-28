@@ -46,8 +46,20 @@ def test_pipeline_writes_research_and_selection_artifacts(monkeypatch, tmp_path:
     assert completion["checks"]["tests_passed"] is True
 
 
-def test_pipeline_fails_closed_without_evidence(monkeypatch, tmp_path: Path) -> None:
+def test_pipeline_auto_falls_back_to_top_candidate_when_evidence_gate_fails(
+    monkeypatch, tmp_path: Path
+) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.execute_render_with_fallback",
+        lambda command, *, config_json, cwd, timeout_seconds=600: {
+            "rendered": False,
+            "fallback": True,
+            "reason": "no-remotion",
+            "command": " ".join(command),
+            "config": config_json,
+        },
+    )
 
     class _Source:
         source_name = "single"
@@ -73,11 +85,14 @@ def test_pipeline_fails_closed_without_evidence(monkeypatch, tmp_path: Path) -> 
     config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
     transitions = run_pipeline(config)
 
-    assert transitions[-1] == RunState.FAILED
+    assert transitions[-1] == RunState.DONE
     run_dirs = list((tmp_path / "runs").glob("*"))
     assert run_dirs
     artifacts = run_dirs[0] / "artifacts"
-    assert (artifacts / "pipeline-error.json").exists()
+    selection = json.loads((artifacts / "selection.json").read_text(encoding="utf-8"))
+    assert selection["selection_mode"] == "auto-fallback"
+    assert selection["evidence_gate_passed"] is False
+    assert selection["recommendation_fallback_used"] is True
 
 
 def test_pipeline_fails_when_completion_contract_is_not_met(monkeypatch, tmp_path: Path) -> None:

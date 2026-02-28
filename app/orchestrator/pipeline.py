@@ -27,7 +27,7 @@ from app.services.dedupe import dedupe_by_title_similarity, dedupe_by_url_hash
 from app.services.evidence_gate import passes_minimum_evidence
 from app.services.mode_policy import detailed_mode_source_limits, fast_mode_source_limits
 from app.services.ranking import ScoredCandidate, rank_candidates
-from app.services.recommendation import choose_recommendation
+from app.services.recommendation import choose_recommendation_with_fallback
 from app.services.selection import prompt_for_selection
 from app.sources.registry import build_source_registry
 from app.storage import RunStore, SafeArtifactWriter
@@ -193,7 +193,9 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                 if not ranked:
                     raise RuntimeError("Selection requires ranked candidates")
 
-                selected, selection_mode, selected_rank = _select_candidate(config, ranked)
+                selected, selection_mode, selected_rank, evidence_gate_passed = _select_candidate(
+                    config, ranked
+                )
                 writer.write_json(
                     "selection.json",
                     {
@@ -201,7 +203,8 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                         "selected_source": selected.candidate.source,
                         "total_score": selected.total_score,
                         "selected_urls": selected.candidate.urls,
-                        "evidence_gate_passed": True,
+                        "evidence_gate_passed": evidence_gate_passed,
+                        "recommendation_fallback_used": not evidence_gate_passed,
                         "selection_mode": selection_mode,
                         "selected_rank": selected_rank,
                     },
@@ -209,7 +212,10 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                 _append_note(
                     notes_path,
                     "SELECTION",
-                    f"mode={selection_mode} rank={selected_rank} title={selected.candidate.title}",
+                    (
+                        f"mode={selection_mode} rank={selected_rank} "
+                        f"title={selected.candidate.title} evidence_gate_passed={evidence_gate_passed}"
+                    ),
                 )
 
             if state == RunState.BUILD:
@@ -411,7 +417,7 @@ def _runtime_health_policy(allow_local_health: bool) -> UrlPolicy:
 def _select_candidate(
     config: RunConfig,
     ranked: list[ScoredCandidate],
-) -> tuple[ScoredCandidate, str, int]:
+) -> tuple[ScoredCandidate, str, int, bool]:
     support = [item.candidate for item in ranked]
 
     if config.selected_option is not None:
@@ -423,7 +429,7 @@ def _select_candidate(
         selected = ranked[index]
         if not passes_minimum_evidence(selected.candidate, support):
             raise ValueError("Explicitly selected candidate failed evidence gate")
-        return selected, "selected-option", index + 1
+        return selected, "selected-option", index + 1, True
 
     if config.pause_for_feedback and config.interactive_selection:
         options = [f"{item.candidate.title} (score={item.total_score:.3f})" for item in ranked]
@@ -431,11 +437,16 @@ def _select_candidate(
         selected = ranked[index]
         if not passes_minimum_evidence(selected.candidate, support):
             raise ValueError("Interactively selected candidate failed evidence gate")
-        return selected, "interactive", index + 1
+        return selected, "interactive", index + 1, True
 
-    selected = choose_recommendation(ranked)
+    selected, used_fallback = choose_recommendation_with_fallback(ranked)
     index = ranked.index(selected)
-    return selected, "auto-evidence", index + 1
+    return (
+        selected,
+        "auto-fallback" if used_fallback else "auto-evidence",
+        index + 1,
+        not used_fallback,
+    )
 
 
 def _generate_project_files(spec: ProjectSpec) -> tuple[str, dict[str, str]]:
