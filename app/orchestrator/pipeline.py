@@ -67,7 +67,14 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
     writer = SafeArtifactWriter(artifacts_dir)
     project_writer = SafeArtifactWriter(project_dir)
 
-    _append_note(notes_path, "RUN_START", f"problem={config.problem_statement!r} mode={config.mode}")
+    _append_note(
+        notes_path,
+        "RUN_START",
+        (
+            f"problem={config.problem_statement!r} mode={config.mode} "
+            f"pause_for_feedback={config.pause_for_feedback}"
+        ),
+    )
 
     store = RunStore(db_path="runs.db")
     store.save_config(run_id, config.model_dump())
@@ -102,6 +109,7 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                         "judging_notes": config.judging_notes,
                         "selected_option": config.selected_option,
                         "interactive_selection": config.interactive_selection,
+                        "pause_for_feedback": config.pause_for_feedback,
                         "allow_local_health": config.allow_local_health,
                         "run_log_path": str(notes_path.resolve()),
                     },

@@ -31,6 +31,11 @@ def test_selected_option_accepts_valid_range() -> None:
     assert cfg.selected_option == 3
 
 
+def test_pause_for_feedback_defaults_to_false() -> None:
+    cfg = RunConfig(problem_statement="x", deadline_hours=4)
+    assert cfg.pause_for_feedback is False
+
+
 @pytest.mark.parametrize("value", [0, 11])
 def test_selected_option_rejects_out_of_bounds(value: int) -> None:
     with pytest.raises(ValidationError):

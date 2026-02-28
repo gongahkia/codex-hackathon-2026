@@ -29,6 +29,7 @@ class RunConfig(BaseModel):
     option_count: int = 5
     weights: Dict[str, float] = Field(default_factory=lambda: DEFAULT_WEIGHTS.copy())
     include_reddit: bool = False
+    pause_for_feedback: bool = False
     selected_option: Optional[int] = None
     interactive_selection: bool = False
     preferred_stack: Optional[str] = None
