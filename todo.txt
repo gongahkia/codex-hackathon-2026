@@ -1,3 +1,2 @@
-(B) Implement integration test for Remotion fallback when renderer is unavailable in `tests/test_video_fallback.py` +testing +integration
 (B) Implement end-to-end CLI test that runs full pipeline with fixture adapters in `tests/test_cli_e2e_run.py` +testing +e2e
 (B) Implement end-to-end CLI test that verifies Reddit opt-in disclaimer enforcement in `tests/test_cli_reddit_optin.py` +testing +e2e
