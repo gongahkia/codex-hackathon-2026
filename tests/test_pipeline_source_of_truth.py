@@ -505,3 +505,29 @@ def test_pipeline_skips_interactive_prompt_when_pause_for_feedback_is_disabled(
     assert run_dirs
     selection = json.loads((run_dirs[0] / "artifacts" / "selection.json").read_text(encoding="utf-8"))
     assert selection["selection_mode"].startswith("auto-")
+
+
+def test_default_run_never_requests_interactive_input(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.execute_render_with_fallback",
+        lambda command, *, config_json, cwd, timeout_seconds=600: {
+            "rendered": False,
+            "fallback": True,
+            "reason": "no-remotion",
+            "command": " ".join(command),
+            "config": config_json,
+        },
+    )
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.prompt_for_selection",
+        lambda _options: (_ for _ in ()).throw(AssertionError("prompt_for_selection should not be called")),
+    )
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("input should not be called")),
+    )
+
+    config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
+    transitions = run_pipeline(config)
+    assert transitions[-1] == RunState.DONE
