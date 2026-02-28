@@ -113,3 +113,38 @@ def test_pipeline_fails_when_completion_contract_is_not_met(monkeypatch, tmp_pat
     completion = json.loads((artifacts / "completion-contract.json").read_text(encoding="utf-8"))
     assert completion["passed"] is False
     assert "tests_passed" in completion["failed_checks"]
+
+
+def test_pipeline_skips_interactive_prompt_when_pause_for_feedback_is_disabled(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.execute_render_with_fallback",
+        lambda command, *, config_json, cwd, timeout_seconds=600: {
+            "rendered": False,
+            "fallback": True,
+            "reason": "no-remotion",
+            "command": " ".join(command),
+            "config": config_json,
+        },
+    )
+
+    def fail_if_prompted(_options):
+        raise AssertionError("interactive prompt should be skipped in one-shot mode")
+
+    monkeypatch.setattr("app.orchestrator.pipeline.prompt_for_selection", fail_if_prompted)
+
+    config = RunConfig(
+        problem_statement="Build secure AI planner",
+        deadline_hours=6,
+        interactive_selection=True,
+        pause_for_feedback=False,
+    )
+    transitions = run_pipeline(config)
+
+    assert transitions[-1] == RunState.DONE
+    run_dirs = list((tmp_path / "runs").glob("*"))
+    assert run_dirs
+    selection = json.loads((run_dirs[0] / "artifacts" / "selection.json").read_text(encoding="utf-8"))
+    assert selection["selection_mode"] == "auto-evidence"

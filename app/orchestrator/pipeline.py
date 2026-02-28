@@ -425,7 +425,7 @@ def _select_candidate(
             raise ValueError("Explicitly selected candidate failed evidence gate")
         return selected, "selected-option", index + 1
 
-    if config.interactive_selection:
+    if config.pause_for_feedback and config.interactive_selection:
         options = [f"{item.candidate.title} (score={item.total_score:.3f})" for item in ranked]
         index = prompt_for_selection(options)
         selected = ranked[index]
