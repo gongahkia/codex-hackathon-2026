@@ -70,6 +70,11 @@ def run_command(
         "--feedback-checkpoints",
         help="Comma-separated checkpoint percentages for interactive feedback.",
     ),
+    strict_fail_fast: bool = typer.Option(
+        False,
+        "--strict-fail-fast",
+        help="Fail immediately on recoverable mid-run errors.",
+    ),
     selected_option: Optional[int] = typer.Option(
         None,
         "--selected-option",
@@ -155,6 +160,7 @@ def run_command(
         include_reddit=include_reddit,
         pause_for_feedback=pause_for_feedback,
         feedback_checkpoints=parsed_feedback_checkpoints,
+        strict_fail_fast=strict_fail_fast,
         selected_option=selected_option,
         interactive_selection=interactive_selection,
         preferred_stack=preferred_stack,

@@ -93,3 +93,29 @@ def test_cli_rejects_invalid_feedback_checkpoints(monkeypatch) -> None:
 
     assert result.exit_code != 0
     assert "feedback_checkpoints must contain integers only" in result.output
+
+
+def test_cli_maps_strict_fail_fast_flag(monkeypatch) -> None:
+    runner = CliRunner()
+
+    def fake_run_pipeline(config):
+        assert config.strict_fail_fast is True
+        return [RunState.INTAKE, RunState.DONE]
+
+    monkeypatch.setattr("app.cli.run_pipeline", fake_run_pipeline)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--problem-statement",
+            "Build AI todo app",
+            "--deadline-hours",
+            "6",
+            "--strict-fail-fast",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["strict_fail_fast"] is True

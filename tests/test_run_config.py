@@ -34,6 +34,7 @@ def test_selected_option_accepts_valid_range() -> None:
 def test_pause_for_feedback_defaults_to_false() -> None:
     cfg = RunConfig(problem_statement="x", deadline_hours=4)
     assert cfg.pause_for_feedback is False
+    assert cfg.strict_fail_fast is False
 
 
 def test_feedback_checkpoints_are_unique_and_sorted() -> None:

@@ -72,7 +72,7 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
         "RUN_START",
         (
             f"problem={config.problem_statement!r} mode={config.mode} "
-            f"pause_for_feedback={config.pause_for_feedback}"
+            f"pause_for_feedback={config.pause_for_feedback} strict_fail_fast={config.strict_fail_fast}"
         ),
     )
 
@@ -110,6 +110,7 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                         "selected_option": config.selected_option,
                         "interactive_selection": config.interactive_selection,
                         "pause_for_feedback": config.pause_for_feedback,
+                        "strict_fail_fast": config.strict_fail_fast,
                         "allow_local_health": config.allow_local_health,
                         "run_log_path": str(notes_path.resolve()),
                     },
