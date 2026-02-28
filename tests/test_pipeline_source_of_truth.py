@@ -94,11 +94,27 @@ def test_pipeline_auto_falls_back_to_top_candidate_when_evidence_gate_fails(
                     "signals": {"complexity": "low", "setup_steps": 2},
                     "source": "single",
                 }
+                ]
+
+    class _SupportSource:
+        source_name = "support"
+
+        def search(self, problem: str, limit: int):
+            _ = (problem, limit)
+            return [
+                {
+                    "title": "Support Candidate",
+                    "summary": "Secondary candidate for source diversity.",
+                    "urls": ["https://github.com/acme/support", "https://devpost.com/software/support"],
+                    "stack": ["Django", "Redis", "Postgres", "Celery"],
+                    "signals": {"complexity": "high", "setup_steps": 8},
+                    "source": "support",
+                }
             ]
 
     monkeypatch.setattr(
         "app.orchestrator.pipeline.build_source_registry",
-        lambda include_reddit=False, policy=None: {"single": _Source()},
+        lambda include_reddit=False, policy=None: {"single": _Source(), "support": _SupportSource()},
     )
 
     config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
@@ -264,9 +280,25 @@ def test_pipeline_verifies_candidate_links_before_ranking(monkeypatch, tmp_path:
                 }
             ]
 
+    class _SupportSource:
+        source_name = "support"
+
+        def search(self, problem: str, limit: int):
+            _ = (problem, limit)
+            return [
+                {
+                    "title": "Support Candidate",
+                    "summary": "Secondary candidate for source diversity.",
+                    "urls": ["https://github.com/acme/support", "https://devpost.com/software/support"],
+                    "stack": ["Django", "Redis", "Postgres", "Celery"],
+                    "signals": {"complexity": "high", "setup_steps": 8},
+                    "source": "support",
+                }
+            ]
+
     monkeypatch.setattr(
         "app.orchestrator.pipeline.build_source_registry",
-        lambda include_reddit=False, policy=None: {"single": _Source()},
+        lambda include_reddit=False, policy=None: {"single": _Source(), "support": _SupportSource()},
     )
 
     def fake_verify(candidates, policy=None):
@@ -531,3 +563,86 @@ def test_default_run_never_requests_interactive_input(monkeypatch, tmp_path: Pat
     config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
     transitions = run_pipeline(config)
     assert transitions[-1] == RunState.DONE
+
+
+def test_pause_for_feedback_triggers_interactive_selection_prompt(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.execute_render_with_fallback",
+        lambda command, *, config_json, cwd, timeout_seconds=600: {
+            "rendered": False,
+            "fallback": True,
+            "reason": "no-remotion",
+            "command": " ".join(command),
+            "config": config_json,
+        },
+    )
+
+    class _Source:
+        source_name = "single"
+
+        def search(self, problem: str, limit: int):
+            _ = (problem, limit)
+            return [
+                {
+                    "title": "Feedback Candidate",
+                    "summary": "Detailed project summary with reproducible setup and evidence.",
+                    "urls": [
+                        "https://github.com/acme/feedback-candidate",
+                        "https://devpost.com/software/feedback-candidate",
+                    ],
+                    "stack": ["Next.js"],
+                    "signals": {"complexity": "low", "setup_steps": 2},
+                    "source": "single",
+                }
+            ]
+
+    class _SupportSource:
+        source_name = "support"
+
+        def search(self, problem: str, limit: int):
+            _ = (problem, limit)
+            return [
+                {
+                    "title": "Support Candidate",
+                    "summary": "Secondary candidate for source diversity.",
+                    "urls": ["https://github.com/acme/support", "https://devpost.com/software/support"],
+                    "stack": ["Django", "Redis", "Postgres", "Celery"],
+                    "signals": {"complexity": "high", "setup_steps": 8},
+                    "source": "support",
+                }
+            ]
+
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.build_source_registry",
+        lambda include_reddit=False, policy=None: {"single": _Source(), "support": _SupportSource()},
+    )
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.verify_candidates_evidence",
+        lambda candidates, policy=None: candidates,
+    )
+
+    prompted = {"count": 0}
+
+    def fake_prompt(_options):
+        prompted["count"] += 1
+        return 0
+
+    monkeypatch.setattr("app.orchestrator.pipeline.prompt_for_selection", fake_prompt)
+
+    config = RunConfig(
+        problem_statement="Build secure AI planner",
+        deadline_hours=6,
+        pause_for_feedback=True,
+        interactive_selection=True,
+    )
+    transitions = run_pipeline(config)
+    assert transitions[-1] == RunState.DONE
+    assert prompted["count"] == 1
+
+    run_dirs = list((tmp_path / "runs").glob("*"))
+    assert run_dirs
+    selection = json.loads((run_dirs[0] / "artifacts" / "selection.json").read_text(encoding="utf-8"))
+    assert selection["selection_mode"] == "interactive"
