@@ -1,8 +1,8 @@
-# `LastMinute`
+# `LastMinuteToo`
 
 This repository is now the canonical source of truth for `last-minute`.
 
-`LastMinute` is a Codex skill for solo hackathon builders. It supports:
+`LastMinuteToo` is a Codex skill for solo hackathon builders. It supports:
 
 1. intake from either a raw problem statement or a `Devpost`/`Luma` hackathon link,
 2. research and ranked build options,

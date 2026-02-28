@@ -29,11 +29,14 @@ class RunConfig(BaseModel):
     option_count: int = 5
     weights: Dict[str, float] = Field(default_factory=lambda: DEFAULT_WEIGHTS.copy())
     include_reddit: bool = False
+    selected_option: Optional[int] = None
+    interactive_selection: bool = False
     preferred_stack: Optional[str] = None
     video_style: Literal["pitch", "walkthrough"] = "pitch"
     video_duration_sec: int = 60
     deployment_health_url: Optional[str] = None
     demo_route: str = "/demo"
+    allow_local_health: bool = False
 
     @field_validator("deadline_hours")
     @classmethod
@@ -54,3 +57,12 @@ class RunConfig(BaseModel):
         if not cleaned:
             raise ValueError("problem_statement must not be empty")
         return cleaned
+
+    @field_validator("selected_option")
+    @classmethod
+    def validate_selected_option(cls, value: Optional[int]) -> Optional[int]:
+        if value is None:
+            return value
+        if value < 1 or value > 10:
+            raise ValueError("selected_option must be between 1 and 10")
+        return value

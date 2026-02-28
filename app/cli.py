@@ -43,9 +43,24 @@ def run_command(
     evidence_weight: float = typer.Option(DEFAULT_WEIGHTS["evidence"], "--evidence-weight"),
     include_reddit: bool = typer.Option(False, "--include-reddit"),
     reddit_confirmation: Optional[str] = typer.Option(None, "--reddit-confirmation"),
+    selected_option: Optional[int] = typer.Option(
+        None,
+        "--selected-option",
+        help="Select ranked option index explicitly (1-based).",
+    ),
+    interactive_selection: bool = typer.Option(
+        False,
+        "--interactive-selection",
+        help="Prompt for ranked option selection before build.",
+    ),
     preferred_stack: Optional[str] = typer.Option(None, "--preferred-stack"),
     deployment_health_url: Optional[str] = typer.Option(None, "--deployment-health-url"),
     demo_route: str = typer.Option("/demo", "--demo-route"),
+    allow_local_health: bool = typer.Option(
+        False,
+        "--allow-local-health",
+        help="Allow localhost/http health checks for local dev smoke mode.",
+    ),
     video_style: str = typer.Option("pitch", "--video-style"),
     video_duration_sec: int = typer.Option(60, "--video-duration-sec"),
 ) -> None:
@@ -104,9 +119,12 @@ def run_command(
         option_count=option_count,
         weights=normalized_weights.model_dump(),
         include_reddit=include_reddit,
+        selected_option=selected_option,
+        interactive_selection=interactive_selection,
         preferred_stack=preferred_stack,
         deployment_health_url=deployment_health_url,
         demo_route=demo_route,
+        allow_local_health=allow_local_health,
         video_style=video_style,
         video_duration_sec=video_duration_sec,
     )

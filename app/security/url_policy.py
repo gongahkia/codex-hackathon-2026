@@ -21,6 +21,7 @@ class UrlPolicy:
     timeout_seconds: float = 10.0
     max_bytes: int = 1_000_000
     allowed_schemes: tuple[str, ...] = ("https",)
+    allow_localhost: bool = False
 
 
 class _NoRedirectHandler(HTTPRedirectHandler):
@@ -83,11 +84,15 @@ def validate_safe_url(url: str, policy: UrlPolicy) -> None:
 
     parsed = urlparse(url)
     if parsed.scheme not in policy.allowed_schemes:
-        raise ValueError("only https URLs are allowed")
+        allowed = ", ".join(policy.allowed_schemes)
+        raise ValueError(f"URL scheme not allowed; expected one of: {allowed}")
 
     hostname = parsed.hostname or ""
     if not hostname:
         raise ValueError("URL must include a hostname")
+
+    if policy.allow_localhost and hostname.lower() in {"localhost", "127.0.0.1", "::1"}:
+        return
 
     _resolve_public_ips(hostname)
 
