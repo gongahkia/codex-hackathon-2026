@@ -22,6 +22,9 @@ from app.runtime.demo_reliability import run_demo_reliability_mode
 from app.runtime.deployment_watch import enforce_deployment_health, watch_deployment_health
 from app.runtime.healthcheck import probe_dev_server
 from app.runtime.install import run_dependency_install
+from app.resilience.circuit_breaker import CircuitBreaker
+from app.resilience.retry import retry_with_jitter
+from app.resilience.timeouts import run_with_timeout
 from app.security.redaction import redact_secrets
 from app.security.url_policy import UrlPolicy
 from app.services.dedupe import dedupe_by_title_similarity, dedupe_by_url_hash
@@ -34,7 +37,6 @@ from app.services.selection import prompt_for_selection
 from app.sources.registry import build_source_registry
 from app.storage import RunStore, SafeArtifactWriter
 from app.storage.cache import RunLocalSourceCache
-from app.resilience.timeouts import run_with_timeout
 from app.testing.e2e_playwright import run_playwright_e2e
 from app.testing.fallback import run_tests_with_fallback
 from app.testing.integration_pytest import run_pytest_integration
@@ -138,6 +140,7 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                     cache_misses = 0
                     rows_by_source: dict[str, list[dict[str, Any]]] = {}
                     pending: dict[Future[list[dict[str, Any]]], tuple[str, int]] = {}
+                    breakers = {source_name: CircuitBreaker() for source_name in registry}
                     max_workers = max(1, min(4, len(registry)))
                     with ThreadPoolExecutor(max_workers=max_workers) as executor:
                         for source_name, adapter in registry.items():
@@ -149,6 +152,15 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                                 continue
 
                             cache_misses += 1
+                            breaker = breakers[source_name]
+                            if not breaker.allow_request():
+                                rows_by_source[source_name] = []
+                                _append_note(
+                                    notes_path,
+                                    "WARNING",
+                                    f"source={source_name} skipped_by_circuit_breaker",
+                                )
+                                continue
                             future = executor.submit(
                                 _search_source_with_timeout,
                                 adapter,
@@ -159,9 +171,12 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
 
                         for future in as_completed(pending):
                             source_name, limit = pending[future]
+                            breaker = breakers[source_name]
                             try:
                                 rows = future.result()
+                                breaker.record_success()
                             except Exception as exc:
+                                breaker.record_failure()
                                 rows = []
                                 _append_note(
                                     notes_path,
@@ -735,12 +750,18 @@ def _search_source_with_timeout(
     problem_statement: str,
     limit: int,
     timeout_seconds: float = 8.0,
+    retries: int = 2,
 ) -> list[dict[str, Any]]:
     if limit <= 0:
         return []
-    rows = run_with_timeout(
-        lambda: adapter.search(problem_statement, limit),
-        timeout_seconds=timeout_seconds,
+    rows = retry_with_jitter(
+        lambda: run_with_timeout(
+            lambda: adapter.search(problem_statement, limit),
+            timeout_seconds=timeout_seconds,
+        ),
+        retries=max(0, retries),
+        base_delay_seconds=0.2,
+        jitter_seconds=0.1,
     )
     return [row for row in rows if isinstance(row, dict)]
 

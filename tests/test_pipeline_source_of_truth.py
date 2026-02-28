@@ -359,6 +359,29 @@ def test_search_source_with_timeout_uses_timeout_guard(monkeypatch) -> None:
     assert rows == [{"title": "item-2"}]
 
 
+def test_search_source_with_timeout_retries_transient_errors(monkeypatch) -> None:
+    class _Adapter:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def search(self, problem: str, limit: int):
+            _ = (problem, limit)
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("transient failure")
+            return [{"title": "recovered"}]
+
+    adapter = _Adapter()
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.run_with_timeout",
+        lambda operation, timeout_seconds: operation(),
+    )
+
+    rows = _search_source_with_timeout(adapter, "test", 2, timeout_seconds=3.0, retries=2)
+    assert rows == [{"title": "recovered"}]
+    assert adapter.calls == 2
+
+
 def test_pipeline_warns_when_completion_contract_is_not_met(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
