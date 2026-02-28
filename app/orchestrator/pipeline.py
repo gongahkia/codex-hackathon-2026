@@ -89,6 +89,8 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
     testing_report: Dict[str, Any] | None = None
     reliability_report: Dict[str, Any] | None = None
     deployment_health_report: Dict[str, Any] | None = None
+    phase_warnings: list[str] = []
+    phase_recoveries: list[str] = []
 
     try:
         for state in PIPELINE_ORDER:
@@ -96,260 +98,278 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
             store.append_transition(run_id, state.value)
             _append_note(notes_path, "STATE", state.value)
 
-            if state == RunState.INTAKE:
-                writer.write_json(
-                    "intake-summary.json",
-                    {
-                        "problem_statement": config.problem_statement,
-                        "hackathon_url": config.hackathon_url,
-                        "similar_hackathons": config.similar_hackathons,
-                        "intake_notes": config.intake_notes,
-                        "judging_rubric_text": config.judging_rubric_text,
-                        "prize_tracks": config.prize_tracks,
-                        "judging_notes": config.judging_notes,
-                        "selected_option": config.selected_option,
-                        "interactive_selection": config.interactive_selection,
-                        "pause_for_feedback": config.pause_for_feedback,
-                        "strict_fail_fast": config.strict_fail_fast,
-                        "allow_local_health": config.allow_local_health,
-                        "run_log_path": str(notes_path.resolve()),
-                    },
-                )
-
-            if state == RunState.RESEARCH:
-                policy = UrlPolicy()
-                registry = build_source_registry(include_reddit=config.include_reddit, policy=policy)
-                source_limits = (
-                    fast_mode_source_limits() if config.mode == "fast" else detailed_mode_source_limits()
-                )
-
-                gathered: list[Candidate] = []
-                per_source: dict[str, int] = {}
-                for source_name, adapter in registry.items():
-                    limit = source_limits.get(source_name, 3)
-                    rows = adapter.search(config.problem_statement, limit)
-                    per_source[source_name] = len(rows)
-                    for row in rows:
-                        try:
-                            gathered.append(Candidate(**row))
-                        except Exception:
-                            continue
-
-                deduped = dedupe_by_url_hash(gathered)
-                deduped = dedupe_by_title_similarity(deduped)
-                candidates = deduped
-                used_research_fallback = False
-                if not candidates:
-                    candidates = [_build_research_fallback_candidate(config.problem_statement)]
-                    used_research_fallback = True
-
-                writer.write_json(
-                    "research-summary.json",
-                    {
-                        "raw_candidate_count": len(gathered),
-                        "deduped_candidate_count": len(candidates),
-                        "per_source": per_source,
-                        "used_fallback_candidate": used_research_fallback,
-                        "fallback_provenance": (
-                            candidates[0].signals.get("provenance") if used_research_fallback else None
-                        ),
-                    },
-                )
-                _append_note(
-                    notes_path,
-                    "RESEARCH",
-                    f"raw={len(gathered)} deduped={len(candidates)} per_source={per_source}",
-                )
-
-            if state == RunState.RANKING:
-                if not candidates:
-                    raise RuntimeError("Cannot rank without research candidates")
-
-                weights = Weights(**config.weights)
-                ranked = rank_candidates(
-                    candidates,
-                    weights,
-                    problem_statement=config.problem_statement,
-                    rubric_text=config.judging_rubric_text,
-                    prize_tracks=config.prize_tracks,
-                )
-                ranking_warnings: list[str] = []
-                used_ranking_fallback = False
-                if not ranked:
-                    used_ranking_fallback = True
-                    ranking_warnings.append(
-                        "Ranking returned no options; injected deterministic fallback candidate."
+            try:
+                if state == RunState.INTAKE:
+                    writer.write_json(
+                        "intake-summary.json",
+                        {
+                            "problem_statement": config.problem_statement,
+                            "hackathon_url": config.hackathon_url,
+                            "similar_hackathons": config.similar_hackathons,
+                            "intake_notes": config.intake_notes,
+                            "judging_rubric_text": config.judging_rubric_text,
+                            "prize_tracks": config.prize_tracks,
+                            "judging_notes": config.judging_notes,
+                            "selected_option": config.selected_option,
+                            "interactive_selection": config.interactive_selection,
+                            "pause_for_feedback": config.pause_for_feedback,
+                            "strict_fail_fast": config.strict_fail_fast,
+                            "allow_local_health": config.allow_local_health,
+                            "run_log_path": str(notes_path.resolve()),
+                        },
                     )
-                    ranked = [_build_ranking_fallback(candidates[0], weights)]
-                writer.write_json(
-                    "ranking-preview.json",
-                    {
-                        "applied_rubric": bool(config.judging_rubric_text),
-                        "prize_tracks": config.prize_tracks,
-                        "used_ranking_fallback": used_ranking_fallback,
-                        "ranking_warnings": ranking_warnings,
-                        "ranked_candidates": [
-                            {
-                                **_serialize_scored_candidate(item),
-                                "rank": index + 1,
-                                "fallback_injected": used_ranking_fallback and index == 0,
-                            }
-                            for index, item in enumerate(ranked[: config.option_count])
-                        ],
-                    },
-                )
-                _append_note(
-                    notes_path,
-                    "RANKING",
-                    (
-                        f"ranked_count={len(ranked)} "
-                        f"top_title={(ranked[0].candidate.title if ranked else 'none')} "
-                        f"fallback={used_ranking_fallback}"
-                    ),
-                )
 
-            if state == RunState.SELECTION:
-                if not ranked:
-                    raise RuntimeError("Selection requires ranked candidates")
+                if state == RunState.RESEARCH:
+                    policy = UrlPolicy()
+                    registry = build_source_registry(include_reddit=config.include_reddit, policy=policy)
+                    source_limits = (
+                        fast_mode_source_limits() if config.mode == "fast" else detailed_mode_source_limits()
+                    )
 
-                selected, selection_mode, selected_rank, evidence_gate_passed = _select_candidate(
-                    config, ranked
-                )
-                writer.write_json(
-                    "selection.json",
-                    {
-                        "selected_title": selected.candidate.title,
-                        "selected_source": selected.candidate.source,
-                        "total_score": selected.total_score,
-                        "selected_urls": selected.candidate.urls,
-                        "evidence_gate_passed": evidence_gate_passed,
-                        "recommendation_fallback_used": not evidence_gate_passed,
-                        "selection_mode": selection_mode,
-                        "selected_rank": selected_rank,
-                    },
-                )
-                _append_note(
-                    notes_path,
-                    "SELECTION",
-                    (
-                        f"mode={selection_mode} rank={selected_rank} "
-                        f"title={selected.candidate.title} evidence_gate_passed={evidence_gate_passed}"
-                    ),
-                )
+                    gathered: list[Candidate] = []
+                    per_source: dict[str, int] = {}
+                    for source_name, adapter in registry.items():
+                        limit = source_limits.get(source_name, 3)
+                        rows = adapter.search(config.problem_statement, limit)
+                        per_source[source_name] = len(rows)
+                        for row in rows:
+                            try:
+                                gathered.append(Candidate(**row))
+                            except Exception:
+                                continue
 
-            if state == RunState.BUILD:
-                spec = _default_build_spec(config, selected)
-                spec, decisions = run_milestone_checkpoints(
-                    spec,
-                    completed_by_checkpoint=_default_checkpoint_progress(config, spec),
-                )
-                writer.write_json(
-                    "checkpoint-replan.json",
-                    {
-                        "project_spec": spec.model_dump(),
-                        "decisions": [_serialize_checkpoint_decision(decision) for decision in decisions],
-                    },
-                )
+                    deduped = dedupe_by_url_hash(gathered)
+                    deduped = dedupe_by_title_similarity(deduped)
+                    candidates = deduped
+                    used_research_fallback = False
+                    if not candidates:
+                        candidates = [_build_research_fallback_candidate(config.problem_statement)]
+                        used_research_fallback = True
 
-                generator_name, files = _generate_project_files(spec)
-                for relative_path, content in files.items():
-                    project_writer.write_text(relative_path, content)
+                    writer.write_json(
+                        "research-summary.json",
+                        {
+                            "raw_candidate_count": len(gathered),
+                            "deduped_candidate_count": len(candidates),
+                            "per_source": per_source,
+                            "used_fallback_candidate": used_research_fallback,
+                            "fallback_provenance": (
+                                candidates[0].signals.get("provenance") if used_research_fallback else None
+                            ),
+                        },
+                    )
+                    _append_note(
+                        notes_path,
+                        "RESEARCH",
+                        f"raw={len(gathered)} deduped={len(candidates)} per_source={per_source}",
+                    )
 
-                build_execution = _run_build_execution(project_writer.root)
-                generated_files = sorted(files.keys())
-                writer.write_json(
-                    "build-generation.json",
-                    {
-                        "generator": generator_name,
-                        "project_root": str(project_writer.root),
-                        "generated_files": generated_files,
-                        "build_execution": build_execution,
-                    },
-                )
-                _append_note(
-                    notes_path,
-                    "BUILD",
-                    f"generator={generator_name} files={len(files)} install_status={build_execution.get('status')}",
-                )
+                if state == RunState.RANKING:
+                    if not candidates:
+                        raise RuntimeError("Cannot rank without research candidates")
 
-                submission = generate_submission_artifact(
-                    problem_statement=config.problem_statement,
-                    spec=spec,
-                    deployment_target=config.deployment_health_url or "localhost fallback",
-                )
-                writer.write_text("submission.md", submission)
-
-                qa_pack = generate_judge_qa_pack(
-                    problem_statement=config.problem_statement,
-                    spec=spec,
-                    rubric_text=config.judging_rubric_text,
-                    prize_tracks=config.prize_tracks,
-                )
-                writer.write_text("judge-qa.md", qa_pack)
-
-            if state == RunState.TEST:
-                if spec is None:
-                    spec = _default_build_spec(config, selected)
-
-                reliability = run_demo_reliability_mode(
-                    artifacts_dir=artifacts_dir,
-                    health_url=config.deployment_health_url,
-                    demo_route=config.demo_route,
-                    allow_local_health=config.allow_local_health,
-                )
-                reliability_report = reliability.to_dict()
-                writer.write_json("demo-reliability.json", reliability_report)
-
-                health_warning: str | None = None
-                try:
-                    if config.allow_local_health:
-                        health_report = enforce_deployment_health(
-                            config.deployment_health_url,
-                            policy=_runtime_health_policy(True),
+                    weights = Weights(**config.weights)
+                    ranked = rank_candidates(
+                        candidates,
+                        weights,
+                        problem_statement=config.problem_statement,
+                        rubric_text=config.judging_rubric_text,
+                        prize_tracks=config.prize_tracks,
+                    )
+                    ranking_warnings: list[str] = []
+                    used_ranking_fallback = False
+                    if not ranked:
+                        used_ranking_fallback = True
+                        ranking_warnings.append(
+                            "Ranking returned no options; injected deterministic fallback candidate."
                         )
-                    else:
-                        health_report = enforce_deployment_health(config.deployment_health_url)
-                except Exception as exc:
-                    if config.strict_fail_fast:
-                        raise
-                    health_warning = redact_secrets(str(exc))
-                    _append_note(notes_path, "WARNING", f"deployment_health: {health_warning}")
+                        ranked = [_build_ranking_fallback(candidates[0], weights)]
+                    writer.write_json(
+                        "ranking-preview.json",
+                        {
+                            "applied_rubric": bool(config.judging_rubric_text),
+                            "prize_tracks": config.prize_tracks,
+                            "used_ranking_fallback": used_ranking_fallback,
+                            "ranking_warnings": ranking_warnings,
+                            "ranked_candidates": [
+                                {
+                                    **_serialize_scored_candidate(item),
+                                    "rank": index + 1,
+                                    "fallback_injected": used_ranking_fallback and index == 0,
+                                }
+                                for index, item in enumerate(ranked[: config.option_count])
+                            ],
+                        },
+                    )
+                    _append_note(
+                        notes_path,
+                        "RANKING",
+                        (
+                            f"ranked_count={len(ranked)} "
+                            f"top_title={(ranked[0].candidate.title if ranked else 'none')} "
+                            f"fallback={used_ranking_fallback}"
+                        ),
+                    )
+
+                if state == RunState.SELECTION:
+                    if not ranked:
+                        raise RuntimeError("Selection requires ranked candidates")
+
+                    selected, selection_mode, selected_rank, evidence_gate_passed = _select_candidate(
+                        config, ranked
+                    )
+                    writer.write_json(
+                        "selection.json",
+                        {
+                            "selected_title": selected.candidate.title,
+                            "selected_source": selected.candidate.source,
+                            "total_score": selected.total_score,
+                            "selected_urls": selected.candidate.urls,
+                            "evidence_gate_passed": evidence_gate_passed,
+                            "recommendation_fallback_used": not evidence_gate_passed,
+                            "selection_mode": selection_mode,
+                            "selected_rank": selected_rank,
+                        },
+                    )
+                    _append_note(
+                        notes_path,
+                        "SELECTION",
+                        (
+                            f"mode={selection_mode} rank={selected_rank} "
+                            f"title={selected.candidate.title} evidence_gate_passed={evidence_gate_passed}"
+                        ),
+                    )
+
+                if state == RunState.BUILD:
+                    spec = _default_build_spec(config, selected)
+                    spec, decisions = run_milestone_checkpoints(
+                        spec,
+                        completed_by_checkpoint=_default_checkpoint_progress(config, spec),
+                    )
+                    writer.write_json(
+                        "checkpoint-replan.json",
+                        {
+                            "project_spec": spec.model_dump(),
+                            "decisions": [_serialize_checkpoint_decision(decision) for decision in decisions],
+                        },
+                    )
+
+                    generator_name, files = _generate_project_files(spec)
+                    for relative_path, content in files.items():
+                        project_writer.write_text(relative_path, content)
+
+                    build_execution = _run_build_execution(project_writer.root)
+                    generated_files = sorted(files.keys())
+                    writer.write_json(
+                        "build-generation.json",
+                        {
+                            "generator": generator_name,
+                            "project_root": str(project_writer.root),
+                            "generated_files": generated_files,
+                            "build_execution": build_execution,
+                        },
+                    )
+                    _append_note(
+                        notes_path,
+                        "BUILD",
+                        f"generator={generator_name} files={len(files)} install_status={build_execution.get('status')}",
+                    )
+
+                    submission = generate_submission_artifact(
+                        problem_statement=config.problem_statement,
+                        spec=spec,
+                        deployment_target=config.deployment_health_url or "localhost fallback",
+                    )
+                    writer.write_text("submission.md", submission)
+
+                    qa_pack = generate_judge_qa_pack(
+                        problem_statement=config.problem_statement,
+                        spec=spec,
+                        rubric_text=config.judging_rubric_text,
+                        prize_tracks=config.prize_tracks,
+                    )
+                    writer.write_text("judge-qa.md", qa_pack)
+
+                if state == RunState.TEST:
+                    if spec is None:
+                        spec = _default_build_spec(config, selected)
+
+                    reliability = run_demo_reliability_mode(
+                        artifacts_dir=artifacts_dir,
+                        health_url=config.deployment_health_url,
+                        demo_route=config.demo_route,
+                        allow_local_health=config.allow_local_health,
+                    )
+                    reliability_report = reliability.to_dict()
+                    writer.write_json("demo-reliability.json", reliability_report)
+
+                    health_warning: str | None = None
                     try:
-                        health_report = watch_deployment_health(
-                            config.deployment_health_url,
-                            policy=_runtime_health_policy(config.allow_local_health),
-                        )
-                    except Exception:
-                        health_report = watch_deployment_health(None)
-                deployment_health_report = health_report.to_dict()
-                if health_warning:
-                    deployment_health_report["warning"] = health_warning
-                writer.write_json("deployment-health.json", deployment_health_report)
+                        if config.allow_local_health:
+                            health_report = enforce_deployment_health(
+                                config.deployment_health_url,
+                                policy=_runtime_health_policy(True),
+                            )
+                        else:
+                            health_report = enforce_deployment_health(config.deployment_health_url)
+                    except Exception as exc:
+                        if config.strict_fail_fast:
+                            raise
+                        health_warning = redact_secrets(str(exc))
+                        _append_note(notes_path, "WARNING", f"deployment_health: {health_warning}")
+                        try:
+                            health_report = watch_deployment_health(
+                                config.deployment_health_url,
+                                policy=_runtime_health_policy(config.allow_local_health),
+                            )
+                        except Exception:
+                            health_report = watch_deployment_health(None)
+                    deployment_health_report = health_report.to_dict()
+                    if health_warning:
+                        deployment_health_report["warning"] = health_warning
+                    writer.write_json("deployment-health.json", deployment_health_report)
 
-                testing_report = _execute_testing_fallback(
-                    config=config,
-                    project_root=project_writer.root,
-                    health_url=config.deployment_health_url,
-                )
-                writer.write_json("testing-report.json", testing_report)
-                _append_note(
-                    notes_path,
-                    "TEST",
-                    f"executed_suite={testing_report['executed_suite']} pass_rate={testing_report['pass_rate']}",
-                )
+                    testing_report = _execute_testing_fallback(
+                        config=config,
+                        project_root=project_writer.root,
+                        health_url=config.deployment_health_url,
+                    )
+                    writer.write_json("testing-report.json", testing_report)
+                    _append_note(
+                        notes_path,
+                        "TEST",
+                        f"executed_suite={testing_report['executed_suite']} pass_rate={testing_report['pass_rate']}",
+                    )
 
-            if state == RunState.VIDEO:
-                _auto_generate_video(config, writer, run_root)
-                if spec is None:
-                    spec = _default_build_spec(config, selected)
+                if state == RunState.VIDEO:
+                    _auto_generate_video(config, writer, run_root)
+                    if spec is None:
+                        spec = _default_build_spec(config, selected)
 
-                pitch_scripts = optimize_pitch_narrative(
-                    project_title=spec.title,
-                    problem_statement=config.problem_statement,
-                    rubric_text=config.judging_rubric_text,
-                    evidence_points=spec.features,
+                    pitch_scripts = optimize_pitch_narrative(
+                        project_title=spec.title,
+                        problem_statement=config.problem_statement,
+                        rubric_text=config.judging_rubric_text,
+                        evidence_points=spec.features,
+                    )
+                    writer.write_json("pitch-narrative.json", pitch_scripts)
+            except Exception as exc:
+                message = redact_secrets(str(exc))
+                writer.write_json(
+                    f"phase-error-{state.value.lower()}.json",
+                    {
+                        "state": state.value,
+                        "error": message,
+                        "recovered": not config.strict_fail_fast,
+                        "strict_fail_fast": config.strict_fail_fast,
+                    },
                 )
-                writer.write_json("pitch-narrative.json", pitch_scripts)
+                _append_note(notes_path, "WARNING", f"state={state.value} error={message}")
+                phase_warnings.append(f"{state.value}: {message}")
+                if config.strict_fail_fast:
+                    raise
+                phase_recoveries.append(state.value)
+                continue
 
         completion = _evaluate_completion_contract(
             artifacts_dir=artifacts_dir,

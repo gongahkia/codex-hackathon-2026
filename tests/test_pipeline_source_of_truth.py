@@ -171,6 +171,38 @@ def test_pipeline_injects_fallback_ranked_option_when_ranking_returns_empty(
     assert ranking["ranked_candidates"][0]["fallback_injected"] is True
 
 
+def test_pipeline_records_phase_errors_and_recovers_in_non_strict_mode(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.execute_render_with_fallback",
+        lambda command, *, config_json, cwd, timeout_seconds=600: {
+            "rendered": False,
+            "fallback": True,
+            "reason": "no-remotion",
+            "command": " ".join(command),
+            "config": config_json,
+        },
+    )
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.rank_candidates",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("rank exploded")),
+    )
+
+    config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
+    transitions = run_pipeline(config)
+    assert transitions[-1] == RunState.DONE
+
+    run_dirs = list((tmp_path / "runs").glob("*"))
+    assert run_dirs
+    payload = json.loads(
+        (run_dirs[0] / "artifacts" / "phase-error-ranking.json").read_text(encoding="utf-8")
+    )
+    assert payload["state"] == "RANKING"
+    assert payload["recovered"] is True
+
+
 def test_pipeline_warns_when_completion_contract_is_not_met(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
