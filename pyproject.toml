@@ -3,7 +3,7 @@ requires = ["setuptools>=70", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "last-minute-too"
+name = "LastMinute"
 version = "0.2.0"
 description = "Security-first hackathon orchestrator with evidence-gated recommendations and hardened runtime policies."
 readme = "README.md"
@@ -21,7 +21,7 @@ dev = [
 ]
 
 [project.scripts]
-last-minute-too = "app.cli:app"
+LastMinute = "app.cli:app"
 
 [tool.setuptools]
 include-package-data = true

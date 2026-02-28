@@ -35,3 +35,36 @@ Prize tracks: AI Track, Education Prize, Social Good
 Deployment health URL: https://<your-app>/health
 Demo route: /demo
 ```
+
+## Team Members
+
+<table>
+	<tbody>
+        <tr>
+            <td align="center">
+                <a href="https://github.com/weisintai">
+                    <img src="https://avatars.githubusercontent.com/u/59339889?v=4" width="100;" alt=""/>
+                    <br />
+                    <sub><b>Wei Sin</b></sub>
+                </a>
+                <br />
+            </td>
+            <td align="center">
+                <a href="https://github.com/injaneity">
+                    <img src="https://avatars.githubusercontent.com/u/44902825?v=4" width="100;" alt=""/>
+                    <br />
+                    <sub><b>Zane Chee</b></sub>
+                </a>
+                <br />
+            </td> 
+            <td align="center">
+                <a href="https://github.com/gongahkia">
+                    <img src="https://avatars.githubusercontent.com/u/117062305?v=4" width="100;" alt="gongahkia"/>
+                    <br />
+                    <sub><b>Gabriel Ong</b></sub>
+                </a>
+                <br />
+            </td>
+        </tr>
+	</tbody>
+</table>
