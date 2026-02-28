@@ -1,4 +1,3 @@
-(A) Implement short recommendation summary renderer in `app/output/summary.py` +output +ranking
 (A) Implement detailed matrix renderer with per-factor scores and source links in `app/output/matrix.py` +output +ranking
 (A) Implement explicit user selection prompt that blocks build phase until option index is chosen in `app/services/selection.py` +selection +core
 (A) Implement chosen-option artifact model in `app/models/selection.py` storing selected candidate and rationale +selection +model
