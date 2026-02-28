@@ -496,6 +496,9 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
             run_id,
             RunState.DONE.value,
             recommendation_title=selected.candidate.title if selected else "",
+            warning_count=len(warnings),
+            fatal_count=len(fatal_errors),
+            last_error_code="",
         )
         _append_note(notes_path, "RUN_DONE", f"recommendation={(selected.candidate.title if selected else '')}")
     except Exception as exc:
@@ -514,7 +517,13 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
         )
         transitions.append(RunState.FAILED)
         store.append_transition(run_id, RunState.FAILED.value)
-        store.set_final_status(run_id, RunState.FAILED.value)
+        store.set_final_status(
+            run_id,
+            RunState.FAILED.value,
+            warning_count=len(warnings),
+            fatal_count=len(fatal_errors),
+            last_error_code=_derive_error_code(fatal_error),
+        )
         _append_note(notes_path, "RUN_FAILED", fatal_error)
 
     return transitions
@@ -946,3 +955,10 @@ def _append_progress_event(path: Path, *, run_id: str, phase: str, message: str)
     }
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload) + "\n")
+
+
+def _derive_error_code(message: str) -> str:
+    head = (message or "").strip().split(":")[0].strip()
+    if not head:
+        return "UNSPECIFIED_ERROR"
+    return "_".join(head.upper().split())[:80]
