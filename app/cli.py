@@ -14,8 +14,8 @@ app = typer.Typer(name="last-minute")
 
 @app.command("run")
 def run_command(
-    problem_statement: str = typer.Option(..., "--problem-statement", "-p"),
-    deadline_hours: int = typer.Option(..., "--deadline-hours", "-d"),
+    problem_statement: Optional[str] = typer.Option(None, "--problem-statement", "-p"),
+    deadline_hours: Optional[int] = typer.Option(None, "--deadline-hours", "-d"),
     mode: str = typer.Option("detailed-live", "--mode"),
     option_count: int = typer.Option(5, "--option-count"),
     relevance_weight: float = typer.Option(DEFAULT_WEIGHTS["relevance"], "--relevance-weight"),
@@ -28,6 +28,12 @@ def run_command(
     video_duration_sec: int = typer.Option(60, "--video-duration-sec"),
 ) -> None:
     """Run one last-minute pipeline configuration cycle."""
+
+    if not problem_statement:
+        problem_statement = typer.prompt("Problem statement").strip()
+
+    if deadline_hours is None:
+        deadline_hours = int(typer.prompt("Deadline (hours)", type=int))
 
     normalized_weights = Weights(
         relevance=relevance_weight,
