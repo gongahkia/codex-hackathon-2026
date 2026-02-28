@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict
 
@@ -16,10 +17,20 @@ def normalize_prompt(prompt: str) -> str:
 class SourceQueryCache:
     """In-memory cache for source query results."""
 
-    entries: Dict[str, Any] = field(default_factory=dict)
+    ttl_seconds: int = 900
+    entries: Dict[str, tuple[float, Any]] = field(default_factory=dict)
 
     def set(self, prompt: str, value: Any) -> None:
-        self.entries[normalize_prompt(prompt)] = value
+        self.entries[normalize_prompt(prompt)] = (time.time(), value)
 
     def get(self, prompt: str) -> Any | None:
-        return self.entries.get(normalize_prompt(prompt))
+        key = normalize_prompt(prompt)
+        cached = self.entries.get(key)
+        if cached is None:
+            return None
+
+        created_at, value = cached
+        if time.time() - created_at > self.ttl_seconds:
+            self.entries.pop(key, None)
+            return None
+        return value
