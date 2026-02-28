@@ -1,4 +1,3 @@
-(A) Implement source adapter interface `SourceAdapter.search(problem, limit)` in `app/sources/base.py` +research +source
 (A) Implement DoraHacks adapter in `app/sources/dorahacks.py` returning normalized candidate records +research +source-dorahacks
 (A) Implement Devpost adapter in `app/sources/devpost.py` returning normalized candidate records +research +source-devpost
 (A) Implement GitHub adapter in `app/sources/github.py` that searches repos by prompt keywords and README matches +research +source-github
