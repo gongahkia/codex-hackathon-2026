@@ -1,4 +1,3 @@
-(A) Implement feature extraction for evidence quality score in `app/scoring/evidence_quality.py` +scoring +ranking
 (A) Implement weighted score aggregator in `app/scoring/aggregate.py` using normalized user weights +scoring +ranking
 (A) Implement ranking service `rank_candidates(candidates, weights)` in `app/services/ranking.py` +scoring +ranking
 (A) Implement top-N selector honoring `option_count` default 5 in `app/services/ranking.py` +scoring +ranking
