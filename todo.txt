@@ -1,4 +1,3 @@
-(A) Implement localhost run command fallback executor in `app/runtime/deploy.py` +deploy +runtime
 (A) Implement test plan selector that attempts E2E first then integration then smoke by remaining minutes in `app/testing/strategy.py` +testing +budget
 (A) Implement Playwright E2E runner adapter in `app/testing/e2e_playwright.py` +testing +e2e
 (A) Implement pytest integration runner adapter in `app/testing/integration_pytest.py` +testing +integration
