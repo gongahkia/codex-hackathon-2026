@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List
@@ -33,6 +34,7 @@ from app.services.selection import prompt_for_selection
 from app.sources.registry import build_source_registry
 from app.storage import RunStore, SafeArtifactWriter
 from app.storage.cache import RunLocalSourceCache
+from app.resilience.timeouts import run_with_timeout
 from app.testing.e2e_playwright import run_playwright_e2e
 from app.testing.fallback import run_tests_with_fallback
 from app.testing.integration_pytest import run_pytest_integration
@@ -134,16 +136,43 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                     per_source: dict[str, int] = {}
                     cache_hits = 0
                     cache_misses = 0
-                    for source_name, adapter in registry.items():
-                        limit = source_limits.get(source_name, 3)
-                        cached_rows = source_cache.get(source_name, config.problem_statement, limit)
-                        if cached_rows is not None:
-                            cache_hits += 1
-                            rows = cached_rows
-                        else:
+                    rows_by_source: dict[str, list[dict[str, Any]]] = {}
+                    pending: dict[Future[list[dict[str, Any]]], tuple[str, int]] = {}
+                    max_workers = max(1, min(4, len(registry)))
+                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        for source_name, adapter in registry.items():
+                            limit = source_limits.get(source_name, 3)
+                            cached_rows = source_cache.get(source_name, config.problem_statement, limit)
+                            if cached_rows is not None:
+                                cache_hits += 1
+                                rows_by_source[source_name] = cached_rows
+                                continue
+
                             cache_misses += 1
-                            rows = adapter.search(config.problem_statement, limit)
+                            future = executor.submit(
+                                _search_source_with_timeout,
+                                adapter,
+                                config.problem_statement,
+                                limit,
+                            )
+                            pending[future] = (source_name, limit)
+
+                        for future in as_completed(pending):
+                            source_name, limit = pending[future]
+                            try:
+                                rows = future.result()
+                            except Exception as exc:
+                                rows = []
+                                _append_note(
+                                    notes_path,
+                                    "WARNING",
+                                    f"source={source_name} search_error={redact_secrets(str(exc))}",
+                                )
+                            rows_by_source[source_name] = rows
                             source_cache.set(source_name, config.problem_statement, limit, rows)
+
+                    for source_name in registry:
+                        rows = rows_by_source.get(source_name, [])
                         per_source[source_name] = len(rows)
                         for row in rows:
                             try:
@@ -699,6 +728,21 @@ def _build_execution_passed(build_execution: Dict[str, Any] | None) -> bool:
         }
 
     return False
+
+
+def _search_source_with_timeout(
+    adapter: Any,
+    problem_statement: str,
+    limit: int,
+    timeout_seconds: float = 8.0,
+) -> list[dict[str, Any]]:
+    if limit <= 0:
+        return []
+    rows = run_with_timeout(
+        lambda: adapter.search(problem_statement, limit),
+        timeout_seconds=timeout_seconds,
+    )
+    return [row for row in rows if isinstance(row, dict)]
 
 
 def _build_research_fallback_candidate(problem_statement: str) -> Candidate:

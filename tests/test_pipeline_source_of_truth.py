@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app.models.run_config import RunConfig
 from app.models.run_state import RunState
-from app.orchestrator.pipeline import run_pipeline
+from app.orchestrator.pipeline import _search_source_with_timeout, run_pipeline
 
 
 def test_pipeline_writes_research_and_selection_artifacts(monkeypatch, tmp_path: Path) -> None:
@@ -278,6 +278,85 @@ def test_pipeline_verifies_candidate_links_before_ranking(monkeypatch, tmp_path:
     config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
     transitions = run_pipeline(config)
     assert transitions[-1] == RunState.DONE
+
+
+def test_pipeline_recovers_when_one_source_times_out(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.execute_render_with_fallback",
+        lambda command, *, config_json, cwd, timeout_seconds=600: {
+            "rendered": False,
+            "fallback": True,
+            "reason": "no-remotion",
+            "command": " ".join(command),
+            "config": config_json,
+        },
+    )
+
+    class _FastSource:
+        source_name = "fast"
+
+        def search(self, problem: str, limit: int):
+            _ = (problem, limit)
+            return [
+                {
+                    "title": "Fast Source Project",
+                    "summary": "Fast source",
+                    "urls": ["https://github.com/acme/fast", "https://devpost.com/software/fast"],
+                    "stack": ["Next.js"],
+                    "signals": {"complexity": "low", "setup_steps": 2},
+                    "source": "fast",
+                }
+            ]
+
+    class _SlowSource:
+        source_name = "slow"
+
+        def search(self, problem: str, limit: int):
+            _ = (problem, limit)
+            return []
+
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline.build_source_registry",
+        lambda include_reddit=False, policy=None: {"fast": _FastSource(), "slow": _SlowSource()},
+    )
+
+    def fake_search_with_timeout(adapter, problem_statement: str, limit: int, timeout_seconds: float = 8.0):
+        _ = (problem_statement, limit, timeout_seconds)
+        if getattr(adapter, "source_name", "") == "slow":
+            raise TimeoutError("search timed out")
+        return adapter.search(problem_statement, limit)
+
+    monkeypatch.setattr("app.orchestrator.pipeline._search_source_with_timeout", fake_search_with_timeout)
+
+    config = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
+    transitions = run_pipeline(config)
+    assert transitions[-1] == RunState.DONE
+
+    run_dirs = list((tmp_path / "runs").glob("*"))
+    assert run_dirs
+    research = json.loads((run_dirs[0] / "artifacts" / "research-summary.json").read_text(encoding="utf-8"))
+    assert research["per_source"]["fast"] == 1
+    assert research["per_source"]["slow"] == 0
+
+
+def test_search_source_with_timeout_uses_timeout_guard(monkeypatch) -> None:
+    class _Adapter:
+        def search(self, problem: str, limit: int):
+            _ = problem
+            return [{"title": f"item-{limit}"}]
+
+    called = {"timeout": None}
+
+    def fake_run_with_timeout(operation, timeout_seconds: float):
+        called["timeout"] = timeout_seconds
+        return operation()
+
+    monkeypatch.setattr("app.orchestrator.pipeline.run_with_timeout", fake_run_with_timeout)
+    rows = _search_source_with_timeout(_Adapter(), "test", 2, timeout_seconds=3.0)
+
+    assert called["timeout"] == 3.0
+    assert rows == [{"title": "item-2"}]
 
 
 def test_pipeline_warns_when_completion_contract_is_not_met(monkeypatch, tmp_path: Path) -> None:
