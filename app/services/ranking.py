@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, List, Mapping
 
 from app.models.candidate import Candidate
@@ -11,7 +11,9 @@ from app.scoring.aggregate import aggregate_weighted_score
 from app.scoring.evidence_quality import evidence_quality_score
 from app.scoring.feasibility import feasibility_score
 from app.scoring.relevance import relevance_score
+from app.scoring.rubric import derive_judging_weights
 from app.scoring.speed import speed_to_build_score
+from app.services.track_fit import TrackFitRecommendation, recommend_track_fit
 
 
 @dataclass
@@ -21,16 +23,21 @@ class ScoredCandidate:
     candidate: Candidate
     factors: Mapping[str, float]
     total_score: float
+    applied_weights: Mapping[str, float] = field(default_factory=dict)
+    track_fit: List[TrackFitRecommendation] = field(default_factory=list)
 
 
 def rank_candidates(
     candidates: Iterable[Candidate],
     weights: Weights | Mapping[str, float],
     problem_statement: str = "",
+    rubric_text: str | None = None,
+    prize_tracks: List[str] | None = None,
 ) -> List[ScoredCandidate]:
     """Score and sort candidates by weighted total score."""
 
     candidate_list = list(candidates)
+    effective_weights = derive_judging_weights(weights, rubric_text)
     scored: List[ScoredCandidate] = []
     for candidate in candidate_list:
         factors = {
@@ -39,8 +46,16 @@ def rank_candidates(
             "speed": speed_to_build_score(candidate),
             "evidence": evidence_quality_score(candidate, candidate_list),
         }
-        total = aggregate_weighted_score(factors, weights)
-        scored.append(ScoredCandidate(candidate=candidate, factors=factors, total_score=total))
+        total = aggregate_weighted_score(factors, effective_weights)
+        scored.append(
+            ScoredCandidate(
+                candidate=candidate,
+                factors=factors,
+                total_score=total,
+                applied_weights=effective_weights.model_dump(),
+                track_fit=recommend_track_fit(candidate, prize_tracks),
+            )
+        )
 
     return sorted(scored, key=lambda item: item.total_score, reverse=True)
 

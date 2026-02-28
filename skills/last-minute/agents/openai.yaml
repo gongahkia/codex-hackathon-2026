@@ -1,0 +1,4 @@
+interface:
+  display_name: "Last Minute"
+  short_description: "Ship hackathon demos under tight deadlines"
+  default_prompt: "Use $last-minute with a problem statement or Devpost/Luma link to rank options, align to judging tracks, and ship a demo with automated video."

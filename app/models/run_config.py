@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -18,6 +18,12 @@ class RunConfig(BaseModel):
     """User-provided configuration for a pipeline run."""
 
     problem_statement: str
+    hackathon_url: Optional[str] = None
+    similar_hackathons: List[str] = Field(default_factory=list)
+    intake_notes: List[str] = Field(default_factory=list)
+    judging_rubric_text: Optional[str] = None
+    prize_tracks: List[str] = Field(default_factory=list)
+    judging_notes: List[str] = Field(default_factory=list)
     deadline_hours: int
     mode: Literal["detailed-live", "fast"] = "detailed-live"
     option_count: int = 5
@@ -26,6 +32,8 @@ class RunConfig(BaseModel):
     preferred_stack: Optional[str] = None
     video_style: Literal["pitch", "walkthrough"] = "pitch"
     video_duration_sec: int = 60
+    deployment_health_url: Optional[str] = None
+    demo_route: str = "/demo"
 
     @field_validator("deadline_hours")
     @classmethod
@@ -38,3 +46,11 @@ class RunConfig(BaseModel):
     @classmethod
     def clamp_option_count(cls, value: int) -> int:
         return max(1, min(value, 10))
+
+    @field_validator("problem_statement")
+    @classmethod
+    def validate_problem_statement(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("problem_statement must not be empty")
+        return cleaned
