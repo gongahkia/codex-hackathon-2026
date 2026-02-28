@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
+import json
 from pathlib import Path
 from typing import Any, Callable, Dict, List
 
@@ -106,6 +107,7 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
             transitions.append(state)
             store.append_transition(run_id, state.value)
             _append_note(notes_path, "STATE", state.value)
+            _append_progress_event(notes_path, run_id=run_id, phase=state.value, message="entered")
             phase_timings.start(state.value)
 
             try:
@@ -932,3 +934,15 @@ def _append_note(path: Path, event: str, detail: str) -> None:
     timestamp = datetime.now(UTC).isoformat()
     with path.open("a", encoding="utf-8") as handle:
         handle.write(f"[{timestamp}] {event}: {detail}\n")
+
+
+def _append_progress_event(path: Path, *, run_id: str, phase: str, message: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "timestamp": datetime.now(UTC).isoformat(),
+        "run_id": run_id,
+        "phase": phase,
+        "message": message,
+    }
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload) + "\n")

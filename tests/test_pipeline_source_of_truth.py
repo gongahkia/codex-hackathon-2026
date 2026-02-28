@@ -54,6 +54,11 @@ def test_pipeline_writes_research_and_selection_artifacts(monkeypatch, tmp_path:
     assert run_outcome["fatal_errors"] == []
     phase_timings = json.loads((artifacts / "phase-timings.json").read_text(encoding="utf-8"))
     assert "INTAKE" in phase_timings
+    note_lines = (run_dirs[0] / "codex-notes.log").read_text(encoding="utf-8").splitlines()
+    progress_lines = [line for line in note_lines if line.startswith("{")]
+    assert progress_lines
+    progress_event = json.loads(progress_lines[0])
+    assert {"run_id", "phase", "message"} <= set(progress_event)
 
 
 def test_pipeline_auto_falls_back_to_top_candidate_when_evidence_gate_fails(
