@@ -551,6 +551,45 @@ def test_pipeline_fails_when_completion_contract_is_not_met_in_strict_mode(
     assert run_outcome["fatal_errors"]
 
 
+def test_completion_contract_warning_vs_strict_failure_regression(
+    monkeypatch, tmp_path: Path
+) -> None:
+    def fake_render(command, *, config_json, cwd, timeout_seconds=600):
+        _ = (command, cwd, timeout_seconds)
+        return {
+            "rendered": False,
+            "fallback": True,
+            "reason": "no-remotion",
+            "command": "stub",
+            "config": config_json,
+        }
+
+    monkeypatch.setattr("app.orchestrator.pipeline.execute_render_with_fallback", fake_render)
+    monkeypatch.setattr(
+        "app.orchestrator.pipeline._execute_testing_fallback",
+        lambda **kwargs: {
+            "executed_suite": "none",
+            "planned_suites": ["integration", "smoke"],
+            "skipped_reasons": {"integration": "suite failed", "smoke": "suite failed"},
+            "pass_rate": 0.0,
+        },
+    )
+
+    non_strict_dir = tmp_path / "non-strict"
+    non_strict_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(non_strict_dir)
+    non_strict = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6)
+    transitions = run_pipeline(non_strict)
+    assert transitions[-1] == RunState.DONE
+
+    strict_dir = tmp_path / "strict"
+    strict_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(strict_dir)
+    strict = RunConfig(problem_statement="Build secure AI planner", deadline_hours=6, strict_fail_fast=True)
+    transitions = run_pipeline(strict)
+    assert transitions[-1] == RunState.FAILED
+
+
 def test_pipeline_skips_interactive_prompt_when_pause_for_feedback_is_disabled(
     monkeypatch, tmp_path: Path
 ) -> None:
