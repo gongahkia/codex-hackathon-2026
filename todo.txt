@@ -1,4 +1,3 @@
-(A) Implement `RunConfig` validator that clamps `option_count` to 1-10 in `app/models/run_config.py` +core +model +config
 (A) Implement `Weights` model in `app/models/scoring.py` with `relevance`, `feasibility`, `speed`, and `evidence` floats +core +model +scoring
 (A) Implement `Weights` normalizer that rescales non-zero weights to sum 1.0 in `app/models/scoring.py` +core +model +scoring
 (A) Implement `Weights` validator that rejects negative values in `app/models/scoring.py` +core +model +scoring

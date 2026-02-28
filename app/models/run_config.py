@@ -33,3 +33,8 @@ class RunConfig(BaseModel):
         if value < 1 or value > 24:
             raise ValueError("deadline_hours must be between 1 and 24")
         return value
+
+    @field_validator("option_count")
+    @classmethod
+    def clamp_option_count(cls, value: int) -> int:
+        return max(1, min(value, 10))
