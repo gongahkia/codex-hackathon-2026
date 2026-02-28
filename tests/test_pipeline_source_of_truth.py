@@ -292,8 +292,10 @@ def test_pipeline_records_phase_errors_and_recovers_in_non_strict_mode(
     payload = json.loads(
         (run_dirs[0] / "artifacts" / "phase-error-ranking.json").read_text(encoding="utf-8")
     )
+    outcome = json.loads((run_dirs[0] / "artifacts" / "run-outcome.json").read_text(encoding="utf-8"))
     assert payload["state"] == "RANKING"
     assert payload["recovered"] is True
+    assert "RANKING" in outcome["recoveries"]
 
 
 def test_pipeline_resumes_from_next_unfinished_state(monkeypatch, tmp_path: Path) -> None:
