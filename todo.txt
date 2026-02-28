@@ -1,4 +1,3 @@
-(A) Implement evidence extractor that detects build writeup links in `app/services/evidence.py` +research +evidence
 (A) Implement evidence extractor that counts independent source domains in `app/services/evidence.py` +research +evidence
 (A) Implement minimum evidence gate in `app/services/evidence_gate.py` requiring code link, writeup link, and two source types +research +evidence
 (A) Implement stale repo detector using last commit date threshold in `app/services/repo_freshness.py` +research +quality
