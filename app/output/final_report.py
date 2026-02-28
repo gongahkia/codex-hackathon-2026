@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -28,3 +30,19 @@ def assemble_final_report(sections: FinalReportSections) -> str:
             "## Demo Video Output Summary\n" + sections.video_output_summary,
         ]
     )
+
+
+def write_final_report_json(sections: FinalReportSections, path: str | Path) -> Path:
+    """Write machine-readable final report JSON output."""
+
+    payload = {
+        "recommendation_summary": sections.recommendation_summary,
+        "ranked_options_matrix": sections.ranked_options_matrix,
+        "implementation_summary": sections.implementation_summary,
+        "testing_report": sections.testing_report,
+        "video_output_summary": sections.video_output_summary,
+    }
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return output_path
