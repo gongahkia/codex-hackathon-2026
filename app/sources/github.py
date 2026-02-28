@@ -63,6 +63,8 @@ class GitHubAdapter(SourceAdapter):
                         "stars": item.get("stargazers_count", 0),
                         "forks": item.get("forks_count", 0),
                         "language": item.get("language"),
+                        "last_commit_date": item.get("pushed_at"),
+                        "repo_updated_at": item.get("updated_at"),
                     },
                     "source": self.source_name,
                 }

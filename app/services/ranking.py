@@ -13,6 +13,7 @@ from app.scoring.feasibility import feasibility_score
 from app.scoring.relevance import relevance_score
 from app.scoring.rubric import derive_judging_weights
 from app.scoring.speed import speed_to_build_score
+from app.services.repo_freshness import is_repo_stale
 from app.services.track_fit import TrackFitRecommendation, recommend_track_fit
 
 
@@ -47,6 +48,7 @@ def rank_candidates(
             "evidence": evidence_quality_score(candidate, candidate_list),
         }
         _apply_unreachable_evidence_penalty(candidate, factors)
+        _apply_repo_freshness_penalty(candidate, factors)
         total = aggregate_weighted_score(factors, effective_weights)
         scored.append(
             ScoredCandidate(
@@ -78,6 +80,24 @@ def _apply_unreachable_evidence_penalty(
     reasons = candidate.signals.setdefault("ranking_penalties", [])
     if isinstance(reasons, list):
         reasons.append("Unreachable evidence URLs; evidence score forced to zero")
+
+
+def _apply_repo_freshness_penalty(
+    candidate: Candidate,
+    factors: dict[str, float],
+) -> None:
+    last_commit_date = candidate.signals.get("last_commit_date")
+    if not last_commit_date:
+        return
+    if not is_repo_stale(last_commit_date):
+        return
+
+    penalty = 0.2
+    factors["feasibility"] = max(0.0, factors["feasibility"] - penalty)
+    factors["freshness_penalty"] = penalty
+    reasons = candidate.signals.setdefault("ranking_penalties", [])
+    if isinstance(reasons, list):
+        reasons.append("Repository is stale; feasibility score penalized")
 
 
 def select_top_candidates(

@@ -96,3 +96,34 @@ def test_ranking_downranks_candidates_with_unreachable_verified_evidence() -> No
 
     assert ranked[0].candidate.title == "Reachable Evidence"
     assert "ranking_penalties" in unreachable.signals
+
+
+def test_ranking_penalizes_stale_repositories() -> None:
+    stale = Candidate(
+        title="Stale Repo",
+        summary="AI helper",
+        urls=["https://github.com/acme/stale", "https://devpost.com/software/stale"],
+        stack=["Next.js"],
+        signals={
+            "setup_steps": 2,
+            "complexity": "low",
+            "last_commit_date": "2020-01-01T00:00:00Z",
+        },
+        source="github",
+    )
+    fresh = Candidate(
+        title="Fresh Repo",
+        summary="AI helper",
+        urls=["https://github.com/acme/fresh", "https://devpost.com/software/fresh"],
+        stack=["Next.js"],
+        signals={
+            "setup_steps": 2,
+            "complexity": "low",
+            "last_commit_date": "2030-01-01T00:00:00Z",
+        },
+        source="github",
+    )
+
+    ranked = rank_candidates([stale, fresh], Weights(), problem_statement="Build AI helper")
+    assert ranked[0].candidate.title == "Fresh Repo"
+    assert "ranking_penalties" in stale.signals
