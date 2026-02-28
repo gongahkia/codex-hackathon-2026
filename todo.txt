@@ -1,1 +1,0 @@
-(B) Implement end-to-end CLI test that verifies Reddit opt-in disclaimer enforcement in `tests/test_cli_reddit_optin.py` +testing +e2e

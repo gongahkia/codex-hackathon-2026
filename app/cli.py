@@ -11,6 +11,7 @@ from app.models.run_state import RunState
 from app.models.scoring import Weights
 from app.orchestrator.pipeline import run_pipeline
 from app.services.mode import parse_mode
+from app.services.source_policy import validate_reddit_opt_in
 
 app = typer.Typer(name="last-minute")
 
@@ -26,6 +27,7 @@ def run_command(
     speed_weight: float = typer.Option(DEFAULT_WEIGHTS["speed"], "--speed-weight"),
     evidence_weight: float = typer.Option(DEFAULT_WEIGHTS["evidence"], "--evidence-weight"),
     include_reddit: bool = typer.Option(False, "--include-reddit"),
+    reddit_confirmation: Optional[str] = typer.Option(None, "--reddit-confirmation"),
     preferred_stack: Optional[str] = typer.Option(None, "--preferred-stack"),
     video_style: str = typer.Option("pitch", "--video-style"),
     video_duration_sec: int = typer.Option(60, "--video-duration-sec"),
@@ -37,6 +39,12 @@ def run_command(
 
     if deadline_hours is None:
         deadline_hours = int(typer.prompt("Deadline (hours)", type=int))
+
+    try:
+        validate_reddit_opt_in(include_reddit, reddit_confirmation)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
 
     normalized_weights = Weights(
         relevance=relevance_weight,
