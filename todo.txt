@@ -1,4 +1,3 @@
-(A) Implement pitch-style storyboard generator in `app/video/storyboards/pitch.py` +video +remotion
 (A) Implement walkthrough storyboard generator in `app/video/storyboards/walkthrough.py` +video +remotion
 (A) Implement Remotion script composer that emits scene config JSON in `app/video/remotion_config.py` +video +remotion
 (A) Implement Remotion render command builder that outputs reproducible CLI command in `app/video/render_command.py` +video +remotion
