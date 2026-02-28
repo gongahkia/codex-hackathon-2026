@@ -41,6 +41,9 @@ def test_pipeline_writes_research_and_selection_artifacts(monkeypatch, tmp_path:
     ranking = json.loads((artifacts / "ranking-preview.json").read_text(encoding="utf-8"))
     titles = [item["title"] for item in ranking["ranked_candidates"]]
     assert not any(title.endswith("- primary path") for title in titles)
+    research = json.loads((artifacts / "research-summary.json").read_text(encoding="utf-8"))
+    assert "source_cache_hits" in research
+    assert "source_cache_misses" in research
 
     completion = json.loads((artifacts / "completion-contract.json").read_text(encoding="utf-8"))
     assert completion["passed"] is True

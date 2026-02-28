@@ -32,6 +32,7 @@ from app.services.recommendation import choose_recommendation_with_fallback
 from app.services.selection import prompt_for_selection
 from app.sources.registry import build_source_registry
 from app.storage import RunStore, SafeArtifactWriter
+from app.storage.cache import RunLocalSourceCache
 from app.testing.e2e_playwright import run_playwright_e2e
 from app.testing.fallback import run_tests_with_fallback
 from app.testing.integration_pytest import run_pytest_integration
@@ -127,12 +128,22 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                     source_limits = (
                         fast_mode_source_limits() if config.mode == "fast" else detailed_mode_source_limits()
                     )
+                    source_cache = RunLocalSourceCache(run_root / "cache" / "sources")
 
                     gathered: list[Candidate] = []
                     per_source: dict[str, int] = {}
+                    cache_hits = 0
+                    cache_misses = 0
                     for source_name, adapter in registry.items():
                         limit = source_limits.get(source_name, 3)
-                        rows = adapter.search(config.problem_statement, limit)
+                        cached_rows = source_cache.get(source_name, config.problem_statement, limit)
+                        if cached_rows is not None:
+                            cache_hits += 1
+                            rows = cached_rows
+                        else:
+                            cache_misses += 1
+                            rows = adapter.search(config.problem_statement, limit)
+                            source_cache.set(source_name, config.problem_statement, limit, rows)
                         per_source[source_name] = len(rows)
                         for row in rows:
                             try:
@@ -159,6 +170,8 @@ def run_pipeline(config: RunConfig) -> list[RunState]:
                             "fallback_provenance": (
                                 candidates[0].signals.get("provenance") if used_research_fallback else None
                             ),
+                            "source_cache_hits": cache_hits,
+                            "source_cache_misses": cache_misses,
                             "verified_code_candidate_count": sum(
                                 1 for candidate in candidates if candidate.signals.get("verified_code_links")
                             ),
